@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <!--
+    Replace vendor/twrp with patched fork (twrpfastboot=1 removed from
+    BoardConfigTWRP.mk). The upstream project is registered in
+    minimal-manifest-twrp/platform_manifest_twrp_aosp/twrp-extras.xml as:
+
+      <project path="vendor/twrp"
+               name="android_vendor_twrp"
+               remote="TeamWin"
+               revision="android-11" />
+
+    The <remove-project> tag must match the `name` attribute (NOT the
+    path), so we use name="android_vendor_twrp" here.
+
+    The fork is at hoshiyomiX/android_vendor_twrp, branch android-11,
+    with commit 88163e4 patching out twrpfastboot=1 from both
+    GENERIC_KERNEL_CMDLINE (header v3) and INTERNAL_KERNEL_CMDLINE
+    (header v0/v2).
+  -->
+  <remove-project name="android_vendor_twrp" />
+  <project name="hoshiyomiX/android_vendor_twrp"
+           path="vendor/twrp"
+           remote="github"
+           revision="android-11" />
+</manifest>

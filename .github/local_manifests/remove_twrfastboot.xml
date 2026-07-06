@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<manifest>
-  <!-- Replace vendor/twrp with patched fork (twrpfastboot=1 removed) -->
-  <remove-project name="vendor/twrp" />
-  <project name="hoshiyomiX/android_vendor_twrp" path="vendor/twrp" remote="github" revision="twrp-16.0" />
-</manifest>

@@ -142,6 +142,32 @@ jobs:
         cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
         mkdir -p .repo/local_manifests
         cp ${{ github.workspace }}/.github/local_manifests/*.xml .repo/local_manifests/
+        echo "=== local_manifests/ contents ==="
+        ls -la .repo/local_manifests/
+        for f in .repo/local_manifests/*.xml; do
+          echo "--- $f ---"
+          cat "$f"
+        done
+
+    - name: Re-sync projects to apply local manifest
+      run: |
+        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
+        # The local_manifests/*.xml files were just copied AFTER the initial
+        # `repo sync` ran inside orangefox_sync_legacy.sh. We must re-sync
+        # for the <remove-project> and replacement <project> entries to
+        # take effect on disk (e.g. swapping TeamWin/android_vendor_twrp
+        # for hoshiyomiX/android_vendor_twrp).
+        #
+        # --force-sync ensures vendor/twrp gets re-cloned from the fork
+        # even if a checkout already exists from the initial sync.
+        # -c fetches the current manifest's revision (NOT default HEAD).
+        repo sync -c --force-sync -j$(nproc --all) vendor/twrp
+        echo "=== verify vendor/twrp is the fork ==="
+        cd vendor/twrp
+        git remote -v
+        git log --oneline -3
+        echo "--- BoardConfigTWRP.mk ---"
+        cat config/BoardConfigTWRP.mk
 
     - name: Clone Device Tree
       run: |
