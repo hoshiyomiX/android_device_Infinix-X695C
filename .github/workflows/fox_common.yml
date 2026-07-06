@@ -164,6 +164,22 @@ jobs:
         fi
 
 
+    - name: Patch TWRP BoardConfig (remove twrpfastboot=1 injection)
+      run: |
+        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
+        echo "Searching for vendor/twrp BoardConfigTWRP.mk files..."
+        find . -path '*/vendor/twrp/*BoardConfigTWRP*.mk' -type f | while read -r f; do
+          echo "  Found: $f"
+          if grep -q 'twrpfastboot=1' "$f"; then
+            echo "    → Contains twrpfastboot=1, removing injection lines..."
+            sed -i '/twrpfastboot=1/d' "$f"
+            echo "    → Patched. Remaining twrpfastboot occurrences: $(grep -c twrpfastboot "$f" || true)"
+          else
+            echo "    → Does not contain twrpfastboot=1, skipping"
+          fi
+        done
+        echo "Patch step complete."
+
     - name: Find Makefile
       run: |
         cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}

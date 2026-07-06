@@ -16,7 +16,3 @@ TARGET_OTA_ASSERT_DEVICE := X695C,Infinix-X695C
 # Init
 TARGET_INIT_VENDOR_LIB := libinit_Infinix-X695C
 TARGET_RECOVERY_DEVICE_MODULES := libinit_Infinix-X695C
-
-# Filter-out twrpfastboot=1 from INTERNAL_KERNEL_CMDLINE
-# This runs in BoardConfig phase, after vendor/twrp adds twrpfastboot=1
-INTERNAL_KERNEL_CMDLINE := $(filter-out twrpfastboot=1,$(INTERNAL_KERNEL_CMDLINE))
