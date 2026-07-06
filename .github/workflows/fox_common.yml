@@ -137,6 +137,12 @@ jobs:
         cd sync/legacy
         ./orangefox_sync_legacy.sh --branch ${{ inputs.MANIFEST_BRANCH }} --path ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
 
+    - name: Copy local manifest
+      run: |
+        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
+        mkdir -p .repo/local_manifests
+        cp ${{ github.workspace }}/.github/local_manifests/*.xml .repo/local_manifests/
+
     - name: Clone Device Tree
       run: |
         cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
@@ -168,14 +174,7 @@ jobs:
     - name: Find Makefile
       run: |
         cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
-        if [ -f ${{ github.event.inputs.DEVICE_PATH }}/twrp_${{ github.event.inputs.DEVICE_NAME }}.mk ]; then
-          echo "DEVICE_MAKEFILE=twrp_${{ github.event.inputs.DEVICE_NAME }}" >> $GITHUB_ENV
-        elif [ -f ${{ github.event.inputs.DEVICE_PATH }}/omni_${{ github.event.inputs.DEVICE_NAME }}.mk ]; then
-          echo "DEVICE_MAKEFILE=omni_${{ github.event.inputs.DEVICE_NAME }}" >> $GITHUB_ENV
-        else
-          echo "DEVICE_MAKEFILE=twrp_${{ github.event.inputs.DEVICE_NAME }}" >> $GITHUB_ENV
-          echo "Warning: No specific makefile found, using default twrp_${{ github.event.inputs.DEVICE_NAME }}"
-        fi
+        echo "DEVICE_MAKEFILE=${{ github.event.inputs.MAKEFILE_NAME }}" >> $GITHUB_ENV
 
     - name: Building OrangeFox Recovery Project 
       run: |

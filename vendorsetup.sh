@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # clone common device tree
-git clone https://github.com/hoshiyomiX/android_transsion_mt6785-common_twrp.git -b android-11.0 device/transsion/mt6785-common
 
 # Partitions Recovery
 export FOX_RECOVERY_BOOT_PARTITION="/dev/block/platform/bootdevice/by-name/boot"
