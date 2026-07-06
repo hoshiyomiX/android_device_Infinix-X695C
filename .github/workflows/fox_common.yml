@@ -14,7 +14,15 @@ on:
       DEVICE_TREE:
         description: 'Custom Recovery Tree URL'
         required: true
-        default: 'https://github.com/excaliburXD/android_device_Infinix-X695C.git'
+        default: 'https://github.com/hoshiyomiX/android_device_Infinix-X695C.git'
+      COMMON_TREE:
+        description: 'Common Device Tree URL'
+        required: true
+        default: 'https://github.com/hoshiyomiX/android_transsion_mt6785-common_twrp'
+      COMMON_TREE_BRANCH:
+        description: 'Common Device Tree Branch'
+        required: true
+        default: 'android-11.0'
       DEVICE_TREE_BRANCH:
         description: 'Device Tree Branch'
         required: true
@@ -74,6 +82,8 @@ jobs:
         echo "Build Target: ${{ github.event.inputs.BUILD_TARGET }}"
         echo "Build Type: ${{ github.event.inputs.BUILD_TYPE }}"
         echo "Device Tree: ${{ github.event.inputs.DEVICE_TREE }}"
+        echo "Common Tree: ${{ github.event.inputs.COMMON_TREE }}"
+        echo "Common Tree Branch: ${{ github.event.inputs.COMMON_TREE_BRANCH }}"
         echo "Device Tree Branch: ${{ github.event.inputs.DEVICE_TREE_BRANCH }}"
         echo "Device Path: ${{ github.event.inputs.DEVICE_PATH }}"
         echo "LDCHECK: ${{ github.event.inputs.LDCHECK }}"
@@ -140,6 +150,18 @@ jobs:
         fi
         cd ${{ github.event.inputs.DEVICE_PATH }}
         echo "COMMIT_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
+
+    - name: Clone Common Tree
+      run: |
+        cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ inputs.MANIFEST_BRANCH }}
+        COMMON_URL="${{ github.event.inputs.COMMON_TREE }}"
+        TOKEN="${{ secrets.RECOVERY }}"
+        if [ -n "$TOKEN" ]; then
+          AUTHED_URL=$(echo $COMMON_URL | sed -e "s#https://#https://${TOKEN}@#")
+          git clone "$AUTHED_URL" -b ${{ github.event.inputs.COMMON_TREE_BRANCH }} ./device/transsion/mt6785-common
+        else
+          git clone "$COMMON_URL" -b ${{ github.event.inputs.COMMON_TREE_BRANCH }} ./device/transsion/mt6785-common
+        fi
 
     - name: Find Makefile
       run: |
