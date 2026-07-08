@@ -1,0 +1,209 @@
+<?xml version="1.0"?>
+<!--
+	Flash GSI wizard for Infinix X695C (MT6785) — OrangeFox Recovery
+
+	Injected post-build via fox_gsi_patch.yml workflow.
+	Page hierarchy:
+	  flash_gsi_select   — file picker for gsi.img
+	  flash_gsi_info     — show file size + hash + target partition
+	  flash_gsi_run      — execute gsi_run.sh via cmd action
+	  flash_gsi_done     — success page with wipe prompt
+
+	Prerequisites (already in ramdisk via device tree):
+	  /sbin/gsi_run.sh    — main flasher script (auto-resize, validate, flash, wipe prompt)
+	  /system/bin/lptools — provided via OF_ENABLE_LPTOOLS=1 in vendorsetup.sh
+
+	Button to launch this wizard is injected into advanced.xml as a listitem.
+-->
+<recovery>
+	<pages>
+
+		<!-- Step 1: File picker — user selects gsi.img -->
+		<page name="flash_gsi_select">
+			<template name="base_ex"/>
+
+			<text style="text_ab_title">
+				<placement x="%col1_x_indent%" y="%ab_bc_y%"/>
+				<text>Flash GSI Image</text>
+			</text>
+
+			<text style="text_ab_subtitle">
+				<placement x="%col1_x_indent%" y="%row1_2_y%"/>
+				<text>Select a GSI image (.img) to flash to system_a</text>
+			</text>
+
+			<fileselector style="fileselector_b">
+				<condition var1="list_font" var2="1"/>
+				<placement x="0" y="%ab_h%" w="%screen_w%" h="%bl_fullscreen_h%"/>
+				<sort name="0"/>
+				<iconsize w="%col1_x_indent%" h="90" padding="25"/>
+				<icon folder="folder_icon_small" file="file_icon_small" />
+				<filter folders="y" files="y" nav="y"/>
+				<path name="gsi_path" default="/sdcard"/>
+				<data name="gsi_file"/>
+				<selection name="gsi_select"/>
+			</fileselector>
+
+			<fileselector style="fileselector_s">
+				<condition var1="list_font" op="!=" var2="1"/>
+				<placement x="0" y="%ab_h%" w="%screen_w%" h="%bl_fullscreen_h%"/>
+				<sort name="0"/>
+				<iconsize w="%col1_x_indent%" h="90" padding="25"/>
+				<icon folder="folder_icon_small" file="file_icon_small" />
+				<filter folders="y" files="y" nav="y"/>
+				<path name="gsi_path" default="/sdcard"/>
+				<data name="gsi_file"/>
+				<selection name="gsi_select"/>
+			</fileselector>
+
+			<!-- When user selects a file, set tw_file to full path and go to info page -->
+			<action>
+				<condition var1="gsi_select" op="!=" var2=""/>
+				<action function="set">tw_file=%gsi_path%/%gsi_file%</action>
+				<action function="page">flash_gsi_info</action>
+			</action>
+		</page>
+
+		<!-- Step 2: Show file info + what will happen -->
+		<page name="flash_gsi_info">
+			<template name="base_ex"/>
+
+			<text style="text_ab_title">
+				<placement x="%col1_x_indent%" y="%ab_bc_y%"/>
+				<text>GSI Image Info</text>
+			</text>
+
+			<text style="caption">
+				<placement x="%col1_x_caption%" y="%row2_1a_y%"/>
+				<text>File</text>
+			</text>
+			<text style="text_body1">
+				<placement x="%col1_x_caption%" y="%row2_2a_y%"/>
+				<text>%tw_file%</text>
+			</text>
+
+			<text style="caption">
+				<placement x="%col1_x_caption%" y="%row3_1a_y%"/>
+				<text>Target partition</text>
+			</text>
+			<text style="text_body1">
+				<placement x="%col1_x_caption%" y="%row3_2a_y%"/>
+				<text>/dev/block/mapper/system_a (active slot)</text>
+			</text>
+
+			<text style="caption">
+				<placement x="%col1_x_caption%" y="%row4_1a_y%"/>
+				<text>Will be performed</text>
+			</text>
+			<text style="text_body1">
+				<placement x="%col1_x_caption%" y="%row4_2a_y%"/>
+				<text>1. Validate ext4 magic + min size 1.5GB
+2. Verify SHA256 (if .sha256 file present)
+3. Auto-resize system_a to 5GB via lptools
+4. Flash GSI image to system_a
+5. Prompt for factory reset (manual wipe)</text>
+			</text>
+
+			<!-- Swipe to confirm and proceed -->
+			<slider style="slider">
+				<placement x="%center_x%" y="%slider_y%" placement="5"/>
+				<action function="page">flash_gsi_run</action>
+			</slider>
+
+			<text style="text_swipe">
+				<placement x="%center_x%" y="%slider_text_y%" placement="5"/>
+				<text>Swipe to start GSI flash</text>
+			</text>
+
+			<!-- Cancel button -->
+			<button style="btn_raised">
+				<placement x="%col1_x_indent%" y="%row7_1_y%" w="%col1_x_btn_w%" h="%row_btn_h%" placement="4"/>
+				<action function="page">advanced</action>
+			</button>
+			<text style="text_btn">
+				<placement x="%col1_x_indent%" y="%row7_1_y%" placement="4"/>
+				<text>Cancel</text>
+			</text>
+		</page>
+
+		<!-- Step 3: Execute gsi_run.sh via cmd action -->
+		<page name="flash_gsi_run">
+			<template name="base_console_cancel"/>
+
+			<text style="text_ab_title">
+				<placement x="%col1_x_indent%" y="%ab_bc_y%"/>
+				<text>Flashing GSI...</text>
+			</text>
+
+			<text style="text_ab_subtitle">
+				<placement x="%col1_x_indent%" y="%row1_2_y%"/>
+				<text>Do not reboot or disconnect power</text>
+			</text>
+
+			<!-- Run the script -->
+			<action>
+				<action function="cmd">
+					/sbin/gsi_run.sh %tw_file%
+				</action>
+			</action>
+
+			<!-- On success (exit code 0), go to done page -->
+			<action>
+				<condition var1="tw_operation_status" var2="0"/>
+				<action function="page">flash_gsi_done</action>
+			</action>
+		</page>
+
+		<!-- Step 4: Success page with wipe prompt -->
+		<page name="flash_gsi_done">
+			<template name="base_ex"/>
+
+			<text style="text_ab_title">
+				<placement x="%col1_x_indent%" y="%ab_bc_y%"/>
+				<text>GSI Flash Complete</text>
+			</text>
+
+			<text style="text_body1">
+				<placement x="%col1_x_caption%" y="%row2_2a_y%"/>
+				<text>GSI image has been flashed to system_a successfully.
+
+IMPORTANT: For GSI to boot properly, you MUST perform a factory reset now to remove vendor remnants that conflict with the new GSI.
+
+Tap "Wipe Data" below to factory reset, or "Reboot" to skip wipe (not recommended).</text>
+			</text>
+
+			<!-- Wipe data button — navigates to TWRP wipe page -->
+			<button style="btn_raised_hl">
+				<placement x="%col1_x_indent%" y="%row5_1_y%" w="%col1_x_btn_w%" h="%row_btn_h%" placement="4"/>
+				<action function="set">tw_back=flash_gsi_done</action>
+				<action function="page">wipe</action>
+			</button>
+			<text style="text_btn">
+				<placement x="%col1_x_indent%" y="%row5_1_y%" placement="4"/>
+				<text>Wipe Data (Recommended)</text>
+			</text>
+
+			<!-- Reboot button (skip wipe) -->
+			<button style="btn_raised">
+				<placement x="%col1_x_indent%" y="%row6_1_y%" w="%col1_x_btn_w%" h="%row_btn_h%" placement="4"/>
+				<action function="set">tw_back=flash_gsi_done</action>
+				<action function="overlay">reboot</action>
+			</button>
+			<text style="text_btn">
+				<placement x="%col1_x_indent%" y="%row6_1_y%" placement="4"/>
+				<text>Reboot System (Skip Wipe)</text>
+			</text>
+
+			<!-- Back to advanced -->
+			<button style="btn_raised">
+				<placement x="%col2_x_indent%" y="%row6_1_y%" w="%col1_x_btn_w%" h="%row_btn_h%" placement="4"/>
+				<action function="page">advanced</action>
+			</button>
+			<text style="text_btn">
+				<placement x="%col2_x_indent%" y="%row6_1_y%" placement="4"/>
+				<text>Back to Advanced</text>
+			</text>
+		</page>
+
+	</pages>
+</recovery>

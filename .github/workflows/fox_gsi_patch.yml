@@ -1,0 +1,201 @@
+name: OrangeFox GSI UI Patch
+
+on:
+  workflow_dispatch:
+    inputs:
+      RELEASE_TAG:
+        description: 'Release tag (run ID) to patch. Leave empty to use latest.'
+        required: false
+        default: ''
+      DEVICE_NAME:
+        description: 'Device name (matches release asset filename)'
+        required: true
+        default: 'Infinix-X695C'
+
+jobs:
+  patch:
+    name: Patch boot.img with Flash GSI wizard
+    runs-on: ubuntu-latest
+    if: github.event.sender.id == github.event.repository.owner.id
+    env:
+      GITHUB_TOKEN: ${{ secrets.RECOVERY }}
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout device tree (for flash_gsi.xml + gsi_run.sh + patch script)
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 file
+
+      - name: Fetch magiskboot binary
+        run: |
+          # magiskboot is part of Magisk. We download the latest Magisk release
+          # and extract magiskboot from the .apk
+          set -e
+          mkdir -p ${{ github.workspace }}/tools
+          cd ${{ github.workspace }}/tools
+          
+          # Get latest Magisk release URL from GitHub API
+          MAGISK_URL=$(curl -sL https://api.github.com/repos/topjohnwu/Magisk/releases/latest \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print(next(a['browser_download_url'] for a in d['assets'] if a['name'].endswith('.apk')))")
+          echo "Downloading Magisk from: $MAGISK_URL"
+          curl -sL -o magisk.apk "$MAGISK_URL"
+          
+          # magiskboot is in lib/<arch>/libmagiskboot.so (renamed from magiskboot)
+          # We use the x86_64 binary inside the apk
+          unzip -p magisk.apk lib/x86_64/libmagiskboot.so > magiskboot
+          chmod +x magiskboot
+          
+          # Verify it runs
+          ./magiskboot --help 2>&1 | head -3 || true
+          echo "magiskboot binary ready: $(pwd)/magiskboot"
+
+      - name: Determine target release
+        id: release
+        run: |
+          if [ -n "${{ github.event.inputs.RELEASE_TAG }}" ]; then
+            TAG="${{ github.event.inputs.RELEASE_TAG }}"
+          else
+            # Get latest release tag
+            TAG=$(curl -sL -H "Authorization: token ${{ env.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/latest" \
+              | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")
+          fi
+          echo "Target release tag: $TAG"
+          echo "tag=$TAG" >> $GITHUB_ENV
+          
+          # Fetch release metadata to get the .img asset URL
+          ASSET_URL=$(curl -sL -H "Authorization: token ${{ env.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG" \
+            | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          target = '${{ github.event.inputs.DEVICE_NAME }}'
+          for a in d.get('assets', []):
+              if a['name'].endswith('.img') and target in a['name'] and 'GSI' not in a['name']:
+                  print(a['url'])
+                  break
+          ")
+          
+          if [ -z "$ASSET_URL" ]; then
+            echo "ERROR: no .img asset found in release $TAG"
+            exit 1
+          fi
+          echo "Asset URL: $ASSET_URL"
+          echo "asset_url=$ASSET_URL" >> $GITHUB_ENV
+          
+          # Also get release upload_url for adding asset later
+          UPLOAD_URL=$(curl -sL -H "Authorization: token ${{ env.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['upload_url'].split('{')[0])")
+          echo "upload_url=$UPLOAD_URL" >> $GITHUB_ENV
+
+      - name: Download original boot.img
+        run: |
+          mkdir -p ${{ github.workspace }}/work
+          cd ${{ github.workspace }}/work
+          
+          # Download with API auth (asset URL requires auth header)
+          curl -sL -H "Authorization: token ${{ env.GITHUB_TOKEN }}" \
+               -H "Accept: application/octet-stream" \
+               -o original.img \
+               "$asset_url"
+          
+          ls -la original.img
+          file original.img
+          
+          # Verify it's an Android boot image
+          if ! head -c 8 original.img | grep -q "ANDROID!"; then
+            echo "ERROR: not an Android boot image"
+            exit 1
+          fi
+
+      - name: Patch boot.img
+        run: |
+          cd ${{ github.workspace }}/work
+          
+          # Copy gsi_run.sh from device tree (recovery/root/sbin/) to gsi-patch/ working dir
+          mkdir -p patch_files
+          cp ${{ github.workspace }}/.github/gsi-patch/flash_gsi.xml patch_files/
+          cp ${{ github.workspace }}/recovery/root/sbin/gsi_run.sh patch_files/
+          
+          # Run the patch script
+          python3 ${{ github.workspace }}/.github/gsi-patch/patch_orangefox_gsi.py \
+            original.img \
+            OrangeFox-GSI-${{ github.event.inputs.DEVICE_NAME }}.img \
+            ${{ github.workspace }}/tools/magiskboot \
+            patch_files
+          
+          echo "=== Patched image ==="
+          ls -la OrangeFox-GSI-*.img
+          file OrangeFox-GSI-*.img
+          
+          # Verify patched image is still valid
+          if ! head -c 8 OrangeFox-GSI-*.img | grep -q "ANDROID!"; then
+            echo "ERROR: patched image is not a valid Android boot image"
+            exit 1
+          fi
+          
+          # Verify twrpfastboot=1 still absent in patched image (sanity check)
+          CMDLINE=$(strings OrangeFox-GSI-*.img | grep -oE 'bootopt=[^ ]+ [^ ]+ [^ ]+ [^ ]+' | head -1)
+          echo "Patched cmdline: $CMDLINE"
+          if echo "$CMDLINE" | grep -q "twrpfastboot=1"; then
+            echo "ERROR: twrpfastboot=1 re-appeared in patched image!"
+            exit 1
+          fi
+          echo "twrpfastboot=1 confirmed ABSENT in patched image"
+
+      - name: Upload patched image as new release asset
+        run: |
+          cd ${{ github.workspace }}/work
+          
+          ASSET_NAME="OrangeFox-GSI-${{ github.event.inputs.DEVICE_NAME }}.img"
+          
+          # Check if asset already exists (from previous run) — delete if so
+          EXISTING_ASSET_ID=$(curl -sL -H "Authorization: token ${{ env.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$tag" \
+            | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          for a in d.get('assets', []):
+              if a['name'] == '$ASSET_NAME':
+                  print(a['id'])
+                  break
+          ")
+          
+          if [ -n "$EXISTING_ASSET_ID" ]; then
+            echo "Deleting existing asset (id=$EXISTING_ASSET_ID)..."
+            curl -sL -X DELETE -H "Authorization: token ${{ env.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/assets/$EXISTING_ASSET_ID"
+          fi
+          
+          # Upload new asset
+          echo "Uploading $ASSET_NAME to release $tag..."
+          curl -sL -X POST \
+            -H "Authorization: token ${{ env.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary "@$ASSET_NAME" \
+            "${upload_url}?name=$ASSET_NAME" \
+            | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          if 'browser_download_url' in d:
+              print('Upload SUCCESS:', d['browser_download_url'])
+          else:
+              print('Upload FAILED:', d)
+              sys.exit(1)
+          "
+          
+          echo ""
+          echo "=== Done ==="
+          echo "Release: https://github.com/${{ github.repository }}/releases/tag/$tag"
+          echo "Asset:   $ASSET_NAME"
