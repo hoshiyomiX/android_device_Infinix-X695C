@@ -109,20 +109,31 @@ jobs:
               print(f\"  - {a['name']} ({a['size']//1024} KB)\")
           "
           
-          # Find .img asset URL (excluding already-patched GSI assets)
+          # Find .img asset URL (excluding already-patched GSI assets).
+          # DEVICE_NAME input is 'Infinix-X695C' but OrangeFox names files as
+          # 'OrangeFox-R11.1_XOS-mt6785-common-X695C.img' (codename only, no 'Infinix-' prefix).
+          # So we extract the codename (everything after the last '-') and match flexibly.
           ASSET_URL=$(python3 -c "
           import json
           with open('$RESPONSE_FILE') as f:
               d = json.load(f)
-          target = '${{ github.event.inputs.DEVICE_NAME }}'
+          full_name = '${{ github.event.inputs.DEVICE_NAME }}'
+          # Extract codename: 'Infinix-X695C' -> 'X695C'
+          codename = full_name.rsplit('-', 1)[-1] if '-' in full_name else full_name
           for a in d.get('assets', []):
-              if a['name'].endswith('.img') and target in a['name'] and 'GSI' not in a['name']:
+              n = a['name']
+              if (n.endswith('.img')
+                      and codename in n
+                      and 'GSI' not in n
+                      and not n.startswith('OrangeFox-GSI-')):
                   print(a['url'])
                   break
           ")
           
           if [ -z "$ASSET_URL" ]; then
-            echo "ERROR: no .img asset found in release $TAG (looking for: ${{ github.event.inputs.DEVICE_NAME }}*.img, excluding *GSI*)"
+            echo "ERROR: no .img asset found in release $TAG"
+            echo "Looking for: *X695C*.img (codename extracted from DEVICE_NAME='Infinix-X695C')"
+            echo "Excluding: *GSI*.img and OrangeFox-GSI-*.img"
             exit 1
           fi
           echo "Asset URL: $ASSET_URL"
