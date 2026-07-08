@@ -174,15 +174,6 @@ jobs:
             exit 1
           fi
           echo "Downloaded boot image is valid (ANDROID! magic present)"
-          
-          ls -la original.img
-          file original.img
-          
-          # Verify it's an Android boot image
-          if ! head -c 8 original.img | grep -q "ANDROID!"; then
-            echo "ERROR: not an Android boot image"
-            exit 1
-          fi
 
       - name: Patch boot.img
         run: |
@@ -193,13 +184,15 @@ jobs:
           cp ${{ github.workspace }}/.github/gsi-patch/flash_gsi.xml patch_files/
           cp ${{ github.workspace }}/recovery/root/sbin/gsi_run.sh patch_files/
           
-          # Run the patch script (use 'set +e' to capture exit code for diagnostics)
+          # Run the patch script. Pass ABSOLUTE paths for all arguments because
+          # the Python script does os.chdir() internally, which would break
+          # relative path resolution.
           set +e
           python3 ${{ github.workspace }}/.github/gsi-patch/patch_orangefox_gsi.py \
-            original.img \
-            OrangeFox-GSI-${{ github.event.inputs.DEVICE_NAME }}.img \
+            ${{ github.workspace }}/work/original.img \
+            ${{ github.workspace }}/work/OrangeFox-GSI-${{ github.event.inputs.DEVICE_NAME }}.img \
             ${{ github.workspace }}/tools/magiskboot \
-            patch_files
+            ${{ github.workspace }}/work/patch_files
           RC=$?
           set -e
           

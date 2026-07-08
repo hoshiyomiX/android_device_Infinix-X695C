@@ -124,7 +124,13 @@ def main():
     input_img = sys.argv[1]
     output_img = sys.argv[2]
     magiskboot = sys.argv[3]
-    patch_files_dir = Path(sys.argv[4])
+    # Resolve patch_files_dir to ABSOLUTE path now, before any os.chdir() calls.
+    # Otherwise relative paths break after we cd into /tmp/ofox_gsi_patch/extracted/.
+    patch_files_dir = Path(sys.argv[4]).resolve()
+    # Also resolve input/output/magiskboot to absolute paths for the same reason.
+    input_img = str(Path(input_img).resolve())
+    output_img = str(Path(output_img).resolve())
+    magiskboot = str(Path(magiskboot).resolve())
 
     print(f"=== OrangeFox GSI Patch ===")
     print(f"  Input:       {input_img}")
