@@ -229,20 +229,39 @@ def main():
     shutil.copy(gsi_run_sh, sbin_dir / "gsi_run.sh")
     os.chmod(sbin_dir / "gsi_run.sh", 0o755)
 
-    # Re-pack the cpio. magiskboot cpio supports 'add' for individual files
-    # We need to update advanced.xml, ui.xml, add flash_gsi.xml, add gsi_run.sh
-    os.chdir(workdir)
-    for f in ["twres/pages/advanced.xml", "twres/pages/flash_gsi.xml",
-               "twres/ui.xml", "sbin/gsi_run.sh"]:
-        src = extract_dir / f
-        if src.is_file():
-            # magiskboot cpio <cpio_file> add <mode> <src_local> <dest_in_cpio>
-            mode = "0755" if f.endswith("gsi_run.sh") else "0644"
-            run([magiskboot, "cpio", str(ramdisk),
-                 "add", mode, str(src), f.lstrip("/")], check=False)
-            print(f"  Added/updated: {f}")
+    # CRITICAL: magiskboot cpio command syntax requires the operation to be
+    # passed as a SINGLE QUOTED STRING, not as separate argv elements.
+    # Reference: Magisk's own boot_patch.sh:
+    #   ./magiskboot cpio $RAMDISK "add 0750 init magiskinit"
+    #
+    # Format: "add <mode> <local_file> <dest_in_cpio>"
+    # - mode: octal permission (e.g. 0644, 0755)
+    # - local_file: path on disk (relative to CWD or absolute)
+    # - dest_in_cpio: path inside cpio archive (NO leading /)
+    #
+    # We must cd into extract_dir so the local_file paths are relative
+    # and match what magiskboot expects.
+    os.chdir(extract_dir)
+    files_to_add = [
+        ("twres/pages/advanced.xml", "0644"),
+        ("twres/pages/flash_gsi.xml", "0644"),
+        ("twres/ui.xml", "0644"),
+        ("sbin/gsi_run.sh", "0755"),
+    ]
+    for dest_in_cpio, mode in files_to_add:
+        src_local = dest_in_cpio  # same path (we're in extract_dir)
+        if not (extract_dir / src_local).is_file():
+            print(f"  WARNING: source file not found: {src_local}", file=sys.stderr)
+            continue
+        # magiskboot cpio add syntax: "add MODE ENTRY INFILE"
+        # where ENTRY = dest path in cpio (NO leading /), INFILE = local source file
+        # Reference: magiskboot cpio help + Magisk boot_patch.sh
+        cmd_str = f"add {mode} {dest_in_cpio} {src_local}"
+        run([magiskboot, "cpio", str(ramdisk), cmd_str], check=False)
+        print(f"  Added/updated: {dest_in_cpio}")
 
     # Re-pack boot.img
+    os.chdir(workdir)
     run([magiskboot, "repack", "boot.img", str(output_img)])
     print(f"\n=== Patched image written to: {output_img} ===")
 
