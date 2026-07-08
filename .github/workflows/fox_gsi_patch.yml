@@ -18,7 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.sender.id == github.event.repository.owner.id
     env:
-      GITHUB_TOKEN: ${{ secrets.RECOVERY }}
+      # Use the auto-provided GITHUB_TOKEN (not a custom 'RECOVERY' secret).
+      # This token has contents:write permission via the permissions: block below,
+      # which is enough to read+upload release assets in the same repo.
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: write
 
@@ -60,25 +63,57 @@ jobs:
           echo "magiskboot binary ready: $(pwd)/magiskboot"
 
       - name: Determine target release
-        id: release
+        env:
+          GH_TOKEN: ${{ env.GITHUB_TOKEN }}
         run: |
+          set -e
+          
+          # Determine target release tag
           if [ -n "${{ github.event.inputs.RELEASE_TAG }}" ]; then
             TAG="${{ github.event.inputs.RELEASE_TAG }}"
           else
-            # Get latest release tag
-            TAG=$(curl -sL -H "Authorization: token ${{ env.GITHUB_TOKEN }}" \
+            # Get latest release tag (using API auth to avoid rate limit)
+            TAG=$(curl -sL -H "Authorization: token $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/releases/latest" \
-              | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")
+              | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          if 'tag_name' not in d:
+              print(f\"ERROR: API returned no tag_name. Response: {d}\", file=sys.stderr)
+              sys.exit(1)
+          print(d['tag_name'])
+          ")
           fi
           echo "Target release tag: $TAG"
           echo "tag=$TAG" >> $GITHUB_ENV
           
-          # Fetch release metadata to get the .img asset URL
-          ASSET_URL=$(curl -sL -H "Authorization: token ${{ env.GITHUB_TOKEN }}" \
+          # Fetch release metadata
+          RESPONSE_FILE=/tmp/release_meta.json
+          curl -sL -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG" \
-            | python3 -c "
+            > $RESPONSE_FILE
+          
+          # Sanity check the response is valid JSON with expected fields
+          python3 -c "
           import json, sys
-          d = json.load(sys.stdin)
+          with open('$RESPONSE_FILE') as f:
+              d = json.load(f)
+          if 'assets' not in d:
+              print(f\"ERROR: API response missing 'assets' field. Full response:\", file=sys.stderr)
+              print(json.dumps(d, indent=2), file=sys.stderr)
+              sys.exit(1)
+          print(f\"Release '{d.get('name','?')}' has {len(d.get('assets',[]))} assets:\")
+          for a in d.get('assets', []):
+              print(f\"  - {a['name']} ({a['size']//1024} KB)\")
+          "
+          
+          # Find .img asset URL (excluding already-patched GSI assets)
+          ASSET_URL=$(python3 -c "
+          import json
+          with open('$RESPONSE_FILE') as f:
+              d = json.load(f)
           target = '${{ github.event.inputs.DEVICE_NAME }}'
           for a in d.get('assets', []):
               if a['name'].endswith('.img') and target in a['name'] and 'GSI' not in a['name']:
@@ -87,28 +122,47 @@ jobs:
           ")
           
           if [ -z "$ASSET_URL" ]; then
-            echo "ERROR: no .img asset found in release $TAG"
+            echo "ERROR: no .img asset found in release $TAG (looking for: ${{ github.event.inputs.DEVICE_NAME }}*.img, excluding *GSI*)"
             exit 1
           fi
           echo "Asset URL: $ASSET_URL"
           echo "asset_url=$ASSET_URL" >> $GITHUB_ENV
           
-          # Also get release upload_url for adding asset later
-          UPLOAD_URL=$(curl -sL -H "Authorization: token ${{ env.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG" \
-            | python3 -c "import json,sys; print(json.load(sys.stdin)['upload_url'].split('{')[0])")
+          # Extract upload_url (strip the {?name,label} template suffix)
+          UPLOAD_URL=$(python3 -c "
+          import json
+          with open('$RESPONSE_FILE') as f:
+              d = json.load(f)
+          print(d['upload_url'].split('{')[0])
+          ")
           echo "upload_url=$UPLOAD_URL" >> $GITHUB_ENV
 
       - name: Download original boot.img
+        env:
+          GH_TOKEN: ${{ env.GITHUB_TOKEN }}
         run: |
           mkdir -p ${{ github.workspace }}/work
           cd ${{ github.workspace }}/work
           
           # Download with API auth (asset URL requires auth header)
-          curl -sL -H "Authorization: token ${{ env.GITHUB_TOKEN }}" \
+          # The Accept: application/octet-stream header makes GitHub redirect
+          # to the actual S3 download URL
+          curl -sL -H "Authorization: token $GH_TOKEN" \
                -H "Accept: application/octet-stream" \
                -o original.img \
                "$asset_url"
+          
+          ls -la original.img
+          file original.img
+          
+          # Verify it's an Android boot image
+          if ! head -c 8 original.img | grep -q "ANDROID!"; then
+            echo "ERROR: downloaded file is not an Android boot image"
+            echo "First 16 bytes:"
+            xxd original.img | head -1
+            exit 1
+          fi
+          echo "Downloaded boot image is valid (ANDROID! magic present)"
           
           ls -la original.img
           file original.img
@@ -128,12 +182,26 @@ jobs:
           cp ${{ github.workspace }}/.github/gsi-patch/flash_gsi.xml patch_files/
           cp ${{ github.workspace }}/recovery/root/sbin/gsi_run.sh patch_files/
           
-          # Run the patch script
+          # Run the patch script (use 'set +e' to capture exit code for diagnostics)
+          set +e
           python3 ${{ github.workspace }}/.github/gsi-patch/patch_orangefox_gsi.py \
             original.img \
             OrangeFox-GSI-${{ github.event.inputs.DEVICE_NAME }}.img \
             ${{ github.workspace }}/tools/magiskboot \
             patch_files
+          RC=$?
+          set -e
+          
+          if [ $RC -ne 0 ]; then
+            echo "ERROR: patch script failed with exit code $RC"
+            echo "=== magiskboot unpack output (if any) ==="
+            ls -la /tmp/ofox_gsi_patch/ 2>/dev/null || true
+            exit $RC
+          fi
+          
+          echo "=== Patched image ==="
+          ls -la OrangeFox-GSI-*.img
+          file OrangeFox-GSI-*.img
           
           echo "=== Patched image ==="
           ls -la OrangeFox-GSI-*.img
@@ -155,13 +223,16 @@ jobs:
           echo "twrpfastboot=1 confirmed ABSENT in patched image"
 
       - name: Upload patched image as new release asset
+        env:
+          GH_TOKEN: ${{ env.GITHUB_TOKEN }}
         run: |
           cd ${{ github.workspace }}/work
           
           ASSET_NAME="OrangeFox-GSI-${{ github.event.inputs.DEVICE_NAME }}.img"
           
           # Check if asset already exists (from previous run) — delete if so
-          EXISTING_ASSET_ID=$(curl -sL -H "Authorization: token ${{ env.GITHUB_TOKEN }}" \
+          EXISTING_ASSET_ID=$(curl -sL -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/releases/tags/$tag" \
             | python3 -c "
           import json, sys
@@ -174,14 +245,16 @@ jobs:
           
           if [ -n "$EXISTING_ASSET_ID" ]; then
             echo "Deleting existing asset (id=$EXISTING_ASSET_ID)..."
-            curl -sL -X DELETE -H "Authorization: token ${{ env.GITHUB_TOKEN }}" \
+            curl -sL -X DELETE -H "Authorization: token $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/releases/assets/$EXISTING_ASSET_ID"
           fi
           
           # Upload new asset
           echo "Uploading $ASSET_NAME to release $tag..."
           curl -sL -X POST \
-            -H "Authorization: token ${{ env.GITHUB_TOKEN }}" \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
             -H "Content-Type: application/octet-stream" \
             --data-binary "@$ASSET_NAME" \
             "${upload_url}?name=$ASSET_NAME" \
@@ -191,7 +264,7 @@ jobs:
           if 'browser_download_url' in d:
               print('Upload SUCCESS:', d['browser_download_url'])
           else:
-              print('Upload FAILED:', d)
+              print('Upload FAILED:', json.dumps(d, indent=2))
               sys.exit(1)
           "
           
