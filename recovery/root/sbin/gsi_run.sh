@@ -15,10 +15,13 @@
 #   5. Post-flash wipe prompt: factory reset to clean vendor remnants
 #
 # Dependencies (already in OrangeFox ramdisk):
-#   - lptools         (provided via OF_ENABLE_LPTOOLS=1)
+#   - lptools         (phhusson/vendor_lptools via OF_ENABLE_LPTOOLS=1)
+#                       Subcommands: create|remove|resize|rename|map|unmap|free
+#                       NOTE: NO 'info' or 'list' subcommand — use 'lptools free'
+#                       for free space and blockdev for current partition size.
 #   - sha256sum       (busybox)
 #   - dd, sync        (busybox)
-#   - lpunpack/lpmake (optional, for super partition inspection)
+#   - blockdev        (busybox)
 #
 # Exit codes:
 #   0 = success
@@ -32,13 +35,20 @@
 #   99 = interrupted by user
 # =============================================================================
 
-set -u
+# -e: exit on any command failure
+# -u: error on unset variable
+# -o pipefail: a pipeline fails if ANY command fails (default sh doesn't have this,
+#   but busybox ash/toybox sh support it; if not, the explicit checks below catch it)
+set -eu
 
 # -----------------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------------
 TARGET_PARTITION="system_a"
-TARGET_SIZE_KB=$((5 * 1024 * 1024))   # 5 GB
+# lptools expects size in BYTES (verified from phhusson/vendor_lptools source:
+#   atoll(argv[2]) -> uint64_t bytes
+# 5 GB = 5 * 1024 * 1024 * 1024 = 5368709120 bytes
+TARGET_SIZE_BYTES=$((5 * 1024 * 1024 * 1024))
 MIN_GSI_SIZE_BYTES=$((1536 * 1024 * 1024))   # 1.5 GB minimum
 LOGFILE="/tmp/gsi_run.log"
 
@@ -61,7 +71,7 @@ die() {
 # -----------------------------------------------------------------------------
 # Step 0: parse args
 # -----------------------------------------------------------------------------
-if [ $# -lt 1 ] || [ $# -gt 1 ]; then
+if [ $# -ne 1 ]; then
     cat <<EOF
 Usage: $0 <gsi.img>
 
@@ -83,16 +93,16 @@ GSI_IMG="$1"
 log "=== gsi_run.sh started ==="
 log "GSI image: $GSI_IMG"
 log "Target partition: $TARGET_PARTITION"
-log "Target size: ${TARGET_SIZE_KB} KB (5 GB)"
+log "Target size: ${TARGET_SIZE_BYTES} bytes (5 GB)"
 
 # -----------------------------------------------------------------------------
 # Step 1: file validator
 # -----------------------------------------------------------------------------
 log "[1/5] Validating GSI image..."
 
-# 1a. Size check
-GSI_SIZE=$(stat -c '%s' "$GSI_IMG" 2>/dev/null || stat -f '%z' "$GSI_IMG" 2>/dev/null)
-[ -n "$GSI_SIZE" ] || die "Cannot determine file size" 2
+# 1a. Size check (busybox stat supports -c on Linux, fallback to -f for BSD/macOS)
+GSI_SIZE=$(stat -c '%s' "$GSI_IMG" 2>/dev/null || stat -f '%z' "$GSI_IMG" 2>/dev/null) || \
+    die "Cannot determine file size" 2
 log "  File size: $((GSI_SIZE / 1024 / 1024)) MB"
 
 if [ "$GSI_SIZE" -lt "$MIN_GSI_SIZE_BYTES" ]; then
@@ -101,7 +111,7 @@ if [ "$GSI_SIZE" -lt "$MIN_GSI_SIZE_BYTES" ]; then
     exit 4
 fi
 
-# 1b. ext4 magic check (offset 0x438 = 0x53 0xEF)
+# 1b. ext4 magic check (offset 0x438 = 0x53 0xEF, decimal offset 1080)
 MAGIC=$(dd if="$GSI_IMG" bs=1 skip=1080 count=2 2>/dev/null | od -An -tx1 | tr -d ' \n')
 if [ "$MAGIC" != "53ef" ]; then
     err "ext4 magic not found at offset 0x438 (got: $MAGIC, expected: 53ef)"
@@ -111,16 +121,24 @@ fi
 log "  ext4 magic: OK"
 
 # 1c. Free space in super partition check
-# Super partition holds logical volumes; we need (5GB - current system_a size) free
-# Use lptools to inspect
-if command -v lptools >/dev/null 2>&1; then
-    SUPER_INFO=$(lptools info 2>/dev/null)
-    log "  Super partition info:"
-    echo "$SUPER_INFO" | head -10 | while read -r line; do log "    $line"; done
-else
-    err "lptools not found in PATH. Cannot verify super partition free space."
+# lptools supports 'free' subcommand — prints free bytes in super partition.
+# lptools does NOT have 'info' or 'list' — those were invalid subcommands.
+if ! command -v lptools >/dev/null 2>&1; then
+    err "lptools not found in PATH."
     err "Make sure OF_ENABLE_LPTOOLS=1 is set in vendorsetup.sh"
     exit 6
+fi
+
+SUPER_FREE_BYTES=$(lptools free 2>/dev/null) || die "lptools free failed" 6
+log "  Super partition free space: $((SUPER_FREE_BYTES / 1024 / 1024)) MB"
+
+# Compute delta needed (only if resize will run; we don't know current size yet,
+# so we conservatively check that at least (5GB - 0) = 5GB is free if resize is needed.
+# The actual resize step will fail gracefully if there's not enough space.
+if [ "$SUPER_FREE_BYTES" -lt "$TARGET_SIZE_BYTES" ]; then
+    err "WARNING: super partition free space ($((SUPER_FREE_BYTES / 1024 / 1024)) MB)"
+    err "is less than target size (5120 MB). Resize may fail."
+    err "Continuing anyway — will fail at resize step if needed."
 fi
 
 # -----------------------------------------------------------------------------
@@ -149,24 +167,29 @@ fi
 # -----------------------------------------------------------------------------
 log "[3/5] Resizing $TARGET_PARTITION to 5GB..."
 
-# Get current size of system_a
-CURRENT_SIZE_KB=$(lptools list 2>/dev/null | awk -v p="$TARGET_PARTITION" '$1==p {print $4}')
-if [ -z "$CURRENT_SIZE_KB" ]; then
-    err "Cannot determine current size of $TARGET_PARTITION via lptools"
-    err "Output of 'lptools list':"
-    lptools list 2>&1 | head -20 | while read -r line; do err "    $line"; done
-    exit 6
+# Get current size of system_a via blockdev (lptools has no 'list' subcommand).
+# blockdev --getsize64 returns size in bytes.
+DEVICE="/dev/block/mapper/$TARGET_PARTITION"
+if [ ! -b "$DEVICE" ]; then
+    err "Block device $DEVICE does not exist"
+    err "Available mapper devices:"
+    ls /dev/block/mapper/ 2>/dev/null | head -10 | while read -r line; do err "    $line"; done
+    exit 7
 fi
-log "  Current $TARGET_PARTITION size: $((CURRENT_SIZE_KB / 1024)) MB"
 
-if [ "$CURRENT_SIZE_KB" -ge "$TARGET_SIZE_KB" ]; then
+CURRENT_SIZE_BYTES=$(blockdev --getsize64 "$DEVICE" 2>/dev/null) || \
+    die "Cannot determine current size of $DEVICE via blockdev" 6
+log "  Current $TARGET_PARTITION size: $((CURRENT_SIZE_BYTES / 1024 / 1024)) MB"
+
+if [ "$CURRENT_SIZE_BYTES" -ge "$TARGET_SIZE_BYTES" ]; then
     log "  Already >= 5GB, skipping resize"
 else
-    DELTA_KB=$((TARGET_SIZE_KB - CURRENT_SIZE_KB))
-    log "  Need to grow by $((DELTA_KB / 1024)) MB"
-    log "  Running: lptools resize $TARGET_PARTITION $TARGET_SIZE_KB"
+    DELTA_BYTES=$((TARGET_SIZE_BYTES - CURRENT_SIZE_BYTES))
+    log "  Need to grow by $((DELTA_BYTES / 1024 / 1024)) MB"
+    log "  Running: lptools resize $TARGET_PARTITION $TARGET_SIZE_BYTES"
 
-    if lptools resize "$TARGET_PARTITION" "$TARGET_SIZE_KB" >>"$LOGFILE" 2>&1; then
+    # lptools resize <partition_name> <new_size_in_bytes>
+    if lptools resize "$TARGET_PARTITION" "$TARGET_SIZE_BYTES" >>"$LOGFILE" 2>&1; then
         log "  Resize succeeded"
     else
         err "lptools resize failed. Check $LOGFILE for details."
@@ -181,15 +204,7 @@ fi
 # -----------------------------------------------------------------------------
 # Step 4: flash GSI to system_a
 # -----------------------------------------------------------------------------
-log "[4/5] Flashing GSI to /dev/block/mapper/$TARGET_PARTITION..."
-
-DEVICE="/dev/block/mapper/$TARGET_PARTITION"
-if [ ! -b "$DEVICE" ]; then
-    err "Block device $DEVICE does not exist"
-    err "Available mapper devices:"
-    ls /dev/block/mapper/ 2>/dev/null | head -10 | while read -r line; do err "    $line"; done
-    exit 7
-fi
+log "[4/5] Flashing GSI to $DEVICE..."
 
 log "  dd if=$GSI_IMG of=$DEVICE bs=1M"
 if dd if="$GSI_IMG" of="$DEVICE" bs=1M 2>>"$LOGFILE"; then

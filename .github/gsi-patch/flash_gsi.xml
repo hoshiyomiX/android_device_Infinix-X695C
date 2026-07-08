@@ -14,6 +14,16 @@
 	  /system/bin/lptools — provided via OF_ENABLE_LPTOOLS=1 in vendorsetup.sh
 
 	Button to launch this wizard is injected into advanced.xml as a listitem.
+
+	Style/variable references verified against OrangeFox theme (Toygoon mirror):
+	  - Styles: text_ab_title, text_ab_subtitle, text_body1, caption, btn_raised,
+	            btn_raised_hl, slider_action, fileselector_b, fileselector_s
+	  - Vars:   col1_x_indent, col1_x_caption, ab_bc_y, ab_h, row1_2_y, row2_1a_y,
+	            row2_2a_y, row3_1a_y, row3_2a_y, row4_1a_y, row4_2a_y,
+	            btn_raised_left_x, btn_raised_right_x, row_btn1_y, row_btn2_y,
+	            row_btn3_y, center_x, slider_y, slider_text_y, screen_w,
+	            bl_fullscreen_h, col1_x_indent
+	  - Templates: base_ex, base_console_cancel
 -->
 <recovery>
 	<pages>
@@ -62,6 +72,12 @@
 				<action function="set">tw_file=%gsi_path%/%gsi_file%</action>
 				<action function="page">flash_gsi_info</action>
 			</action>
+
+			<!-- Back key returns to advanced -->
+			<action>
+				<touch key="back"/>
+				<action function="page">advanced</action>
+			</action>
 		</page>
 
 		<!-- Step 2: Show file info + what will happen -->
@@ -104,29 +120,35 @@
 5. Prompt for factory reset (manual wipe)</text>
 			</text>
 
-			<!-- Swipe to confirm and proceed -->
-			<slider style="slider">
+			<!-- Swipe to confirm and proceed. Use slider_action style (real OrangeFox). -->
+			<slider style="slider_action">
 				<placement x="%center_x%" y="%slider_y%" placement="5"/>
 				<action function="page">flash_gsi_run</action>
 			</slider>
 
-			<text style="text_swipe">
+			<!-- Swipe hint text uses 'caption' style (matches OrangeFox install.xml pattern) -->
+			<text style="caption">
 				<placement x="%center_x%" y="%slider_text_y%" placement="5"/>
 				<text>Swipe to start GSI flash</text>
 			</text>
 
-			<!-- Cancel button -->
+			<!-- Cancel button — uses standard OrangeFox btn_raised style + placement vars -->
 			<button style="btn_raised">
-				<placement x="%col1_x_indent%" y="%row7_1_y%" w="%col1_x_btn_w%" h="%row_btn_h%" placement="4"/>
+				<placement x="%btn_raised_left_x%" y="%row_btn3_y%"/>
+				<text>Cancel</text>
 				<action function="page">advanced</action>
 			</button>
-			<text style="text_btn">
-				<placement x="%col1_x_indent%" y="%row7_1_y%" placement="4"/>
-				<text>Cancel</text>
-			</text>
+
+			<action>
+				<touch key="back"/>
+				<action function="page">flash_gsi_select</action>
+			</action>
 		</page>
 
-		<!-- Step 3: Execute gsi_run.sh via cmd action -->
+		<!-- Step 3: Execute gsi_run.sh via cmd action.
+		     CRITICAL: cmd action must be single-line and quote the path argument
+		     to handle filenames with spaces. The TWRP cmd() function passes the
+		     whole arg string to system(), so we use sh -c style with single quotes. -->
 		<page name="flash_gsi_run">
 			<template name="base_console_cancel"/>
 
@@ -140,21 +162,33 @@
 				<text>Do not reboot or disconnect power</text>
 			</text>
 
-			<!-- Run the script -->
-			<action>
-				<action function="cmd">
-					/sbin/gsi_run.sh %tw_file%
-				</action>
-			</action>
+			<!-- Run the script. Single quotes around %tw_file% handle spaces in path. -->
+			<action function="cmd">/sbin/gsi_run.sh '%tw_file%'</action>
 
-			<!-- On success (exit code 0), go to done page -->
+			<!-- On success (tw_operation_status=0), go to done page.
+			     tw_operation_status is set by operation_end() in TWRP action.cpp. -->
 			<action>
+				<condition var1="tw_operation_state" var2="1"/>
 				<condition var1="tw_operation_status" var2="0"/>
 				<action function="page">flash_gsi_done</action>
 			</action>
+
+			<!-- On failure, stay on this page (console shows error output) -->
+			<action>
+				<condition var1="tw_operation_state" var2="1"/>
+				<condition var1="tw_operation_status" var2="1"/>
+				<action function="set">tw_action_text1=GSI flash failed — check console output above</action>
+			</action>
+
+			<action>
+				<touch key="back"/>
+				<action function="page">flash_gsi_info</action>
+			</action>
 		</page>
 
-		<!-- Step 4: Success page with wipe prompt -->
+		<!-- Step 4: Success page with wipe prompt.
+		     Uses standard OrangeFox button pattern: <text> inside <button>,
+		     btn_raised style, btn_raised_left_x / btn_raised_right_x / row_btnN_y vars. -->
 		<page name="flash_gsi_done">
 			<template name="base_ex"/>
 
@@ -172,37 +206,33 @@ IMPORTANT: For GSI to boot properly, you MUST perform a factory reset now to rem
 Tap "Wipe Data" below to factory reset, or "Reboot" to skip wipe (not recommended).</text>
 			</text>
 
-			<!-- Wipe data button — navigates to TWRP wipe page -->
+			<!-- Wipe data button — left side, highlighted (recommended action) -->
 			<button style="btn_raised_hl">
-				<placement x="%col1_x_indent%" y="%row5_1_y%" w="%col1_x_btn_w%" h="%row_btn_h%" placement="4"/>
+				<placement x="%btn_raised_left_x%" y="%row_btn1_y%"/>
+				<text>Wipe Data (Recommended)</text>
 				<action function="set">tw_back=flash_gsi_done</action>
 				<action function="page">wipe</action>
 			</button>
-			<text style="text_btn">
-				<placement x="%col1_x_indent%" y="%row5_1_y%" placement="4"/>
-				<text>Wipe Data (Recommended)</text>
-			</text>
 
-			<!-- Reboot button (skip wipe) -->
+			<!-- Reboot button (skip wipe) — left side, row 2 -->
 			<button style="btn_raised">
-				<placement x="%col1_x_indent%" y="%row6_1_y%" w="%col1_x_btn_w%" h="%row_btn_h%" placement="4"/>
+				<placement x="%btn_raised_left_x%" y="%row_btn2_y%"/>
+				<text>Reboot System (Skip Wipe)</text>
 				<action function="set">tw_back=flash_gsi_done</action>
 				<action function="overlay">reboot</action>
 			</button>
-			<text style="text_btn">
-				<placement x="%col1_x_indent%" y="%row6_1_y%" placement="4"/>
-				<text>Reboot System (Skip Wipe)</text>
-			</text>
 
-			<!-- Back to advanced -->
+			<!-- Back to advanced — right side, row 2 -->
 			<button style="btn_raised">
-				<placement x="%col2_x_indent%" y="%row6_1_y%" w="%col1_x_btn_w%" h="%row_btn_h%" placement="4"/>
+				<placement x="%btn_raised_right_x%" y="%row_btn2_y%"/>
+				<text>Back to Advanced</text>
 				<action function="page">advanced</action>
 			</button>
-			<text style="text_btn">
-				<placement x="%col2_x_indent%" y="%row6_1_y%" placement="4"/>
-				<text>Back to Advanced</text>
-			</text>
+
+			<action>
+				<touch key="back"/>
+				<action function="page">advanced</action>
+			</action>
 		</page>
 
 	</pages>

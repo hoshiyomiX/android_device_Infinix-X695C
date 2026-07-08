@@ -60,6 +60,9 @@ def inject_button_into_advanced(advanced_xml_content):
         <icon res="bs_adv_se"/>
         <action function="page">flash_gsi_select</action>
       </listitem>
+
+    Regex is whitespace-tolerant (\s*) — matches regardless of whether the theme
+    uses tabs or spaces for indentation, and regardless of indent depth.
     """
     button_xml = (
         '\t\t\t\t<listitem name="Flash GSI Image">\n'
@@ -69,16 +72,16 @@ def inject_button_into_advanced(advanced_xml_content):
         '\t\t\t\t</listitem>\n'
     )
 
-    # Insert AFTER the "Mount" listitem, BEFORE "Magisk Manager" listitem
-    # Pattern: <listitem name="{@mount_hdr}">...</listitem> (multiline)
-    # The Mount listitem has a closing </listitem> before <listitem name="Magisk Manager">
-    pattern = r'(\t\t\t\t<listitem name="\{@mount_hdr\}">[\s\S]*?</listitem>\n)'
+    # Insert AFTER the "Mount" listitem, BEFORE "Magisk Manager" listitem.
+    # Use whitespace-tolerant regex (\s*) instead of literal \t\t\t\t —
+    # this survives indentation changes (2 tabs, 4 tabs, spaces, etc.).
+    pattern = r'(\s*<listitem name="\{@mount_hdr\}"[^>]*>[\s\S]*?</listitem>\s*\n)'
     match = re.search(pattern, advanced_xml_content)
     if not match:
         # Fallback: insert before "Magisk Manager" listitem
         pattern = (
-            r'(\t\t\t\t<listitem name="Magisk Manager"'
-            r'[\s\S]*?</listitem>\n)'
+            r'(\s*<listitem name="Magisk Manager"'
+            r'[^>]*>[\s\S]*?</listitem>\s*\n)'
         )
         match = re.search(pattern, advanced_xml_content)
         if not match:
