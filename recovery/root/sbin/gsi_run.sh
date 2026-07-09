@@ -170,11 +170,21 @@ unmount_partition_safely() {
     if umount "$mount_point" 2>>"$LOGFILE"; then
         log "    $mount_point: unmounted successfully"
         return 0
-    else
-        err "    $mount_point: FAILED to unmount — cannot proceed with resize safely"
-        err "    Possible causes: files open in $mount_point, recovery using it for something"
-        return 8
     fi
+
+    # N5 fix: regular umount failed (likely EBUSY — recovery has files open).
+    # Try lazy unmount (umount -l): detaches filesystem immediately, cleans up
+    # when last file handle closes. Safe for resize because lptools resize
+    # operates on the block device level, not the filesystem level.
+    log "    $mount_point: regular umount failed, trying lazy unmount (umount -l)..."
+    if umount -l "$mount_point" 2>>"$LOGFILE"; then
+        log "    $mount_point: lazy unmount succeeded (will finalize when files close)"
+        return 0
+    fi
+
+    err "    $mount_point: FAILED to unmount (even lazy) — cannot proceed with resize safely"
+    err "    Possible causes: files locked in $mount_point, recovery actively using it"
+    return 8
 }
 
 # -----------------------------------------------------------------------------
@@ -243,12 +253,24 @@ if ! command -v lptools >/dev/null 2>&1; then
 fi
 
 # 1d. Verify target device exists
+# N2 fix: if device not mapped, try lptools map before giving up.
+# Some recovery builds don't auto-map all logical partitions at boot.
 if [ ! -b "$DEVICE" ]; then
-    err "Block device $DEVICE does not exist"
-    err "Available mapper devices:"
-    ls /dev/block/mapper/ 2>/dev/null | head -10 | while read -r line; do err "    $line"; done
-    exit 7
+    log "  $DEVICE not found — attempting lptools map..."
+    if lptools map "$TARGET_PARTITION" >>"$LOGFILE" 2>&1; then
+        log "  lptools map succeeded"
+    else
+        log "  lptools map failed (partition may not exist in super metadata)"
+    fi
+    # Re-check after map attempt
+    if [ ! -b "$DEVICE" ]; then
+        err "Block device $DEVICE does not exist (even after lptools map attempt)"
+        err "Available mapper devices:"
+        ls /dev/block/mapper/ 2>/dev/null | head -10 | while read -r line; do err "    $line"; done
+        exit 7
+    fi
 fi
+log "  Target device $DEVICE: exists"
 
 # -----------------------------------------------------------------------------
 # Step 2: hash verify (optional, if .sha256 file exists)
@@ -435,8 +457,16 @@ if [ "$GSI_SIZE" -gt "$FINAL_SIZE" ]; then
 fi
 log "  Pre-flash size check: PASS (GSI fits in partition)"
 
-log "  dd if=$GSI_IMG of=$DEVICE bs=1M"
-if dd if="$GSI_IMG" of="$DEVICE" bs=1M 2>>"$LOGFILE"; then
+# N3 fix: conv=fsync ensures dd flushes each block to disk immediately.
+#   Without this, a power loss mid-flash leaves unflushed kernel page cache
+#   → corrupted partition → brick. fsync is slightly slower but critical
+#   for safety.
+# N4 fix: dd stderr goes to CONSOLE (not logfile) so user sees progress bar.
+#   Previously stderr was redirected to $LOGFILE, making the console appear
+#   frozen for 30-60 seconds during a 3GB flash. User might think device
+#   hung and force-reboot → N3 scenario (corrupt partition).
+log "  dd if=$GSI_IMG of=$DEVICE bs=1M conv=fsync (progress visible below)"
+if dd if="$GSI_IMG" of="$DEVICE" bs=1M conv=fsync 2>&1 | tee -a "$LOGFILE"; then
     sync
     log "  dd completed, sync done"
 else
