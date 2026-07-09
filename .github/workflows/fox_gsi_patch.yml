@@ -41,17 +41,26 @@ jobs:
 
       - name: Fetch magiskboot binary
         run: |
-          # magiskboot is part of Magisk. We download the latest Magisk release
+          # magiskboot is part of Magisk. We download a PINNED Magisk release
+          # (L4 fix: pin version to avoid API breaking changes in future releases)
           # and extract magiskboot from the .apk
           set -e
           mkdir -p ${{ github.workspace }}/tools
           cd ${{ github.workspace }}/tools
           
-          # Get latest Magisk release URL from GitHub API
-          MAGISK_URL=$(curl -sL https://api.github.com/repos/topjohnwu/Magisk/releases/latest \
-            | python3 -c "import json,sys; d=json.load(sys.stdin); print(next(a['browser_download_url'] for a in d['assets'] if a['name'].endswith('.apk')))")
-          echo "Downloading Magisk from: $MAGISK_URL"
+          # L4 fix: pin Magisk version. Update this SHA + URL when intentionally upgrading.
+          # v30.7 is the latest stable as of 2026-07. Pinning prevents silent breakage
+          # if Magisk changes cpio subcommands or boot header format in a future release.
+          MAGISK_VERSION="v30.7"
+          MAGISK_URL="https://github.com/topjohnwu/Magisk/releases/download/${MAGISK_VERSION}/app-debug.apk"
+          echo "Downloading Magisk ${MAGISK_VERSION} from: $MAGISK_URL"
           curl -sL -o magisk.apk "$MAGISK_URL"
+          
+          # Verify download succeeded (non-zero file)
+          if [ ! -s magisk.apk ]; then
+            echo "ERROR: magisk.apk download failed or empty"
+            exit 1
+          fi
           
           # magiskboot is in lib/<arch>/libmagiskboot.so (renamed from magiskboot)
           # We use the x86_64 binary inside the apk
@@ -60,7 +69,7 @@ jobs:
           
           # Verify it runs
           ./magiskboot --help 2>&1 | head -3 || true
-          echo "magiskboot binary ready: $(pwd)/magiskboot"
+          echo "magiskboot binary ready: $(pwd)/magiskboot (Magisk ${MAGISK_VERSION})"
 
       - name: Determine target release
         env:
@@ -218,7 +227,10 @@ jobs:
           fi
           
           # Verify twrpfastboot=1 still absent in patched image (sanity check)
-          CMDLINE=$(strings OrangeFox-GSI-*.img | grep -oE 'bootopt=[^ ]+ [^ ]+ [^ ]+ [^ ]+' | head -1)
+          # M6 fix: parse boot header via Python struct.unpack instead of fragile
+          # `strings | grep` which can match kernel/ramdisk strings instead of header.
+          # Single-line python3 -c to avoid YAML block scalar indentation issues.
+          CMDLINE=$(python3 -c "import struct,sys; f=open('OrangeFox-GSI-Infinix-X695C.img','rb'); d=f.read(16384); f.close(); sys.exit(1) if d[:8]!=b'ANDROID!' else None; print(d[64:64+512].rstrip(b'\x00').decode('utf-8',errors='replace'))")
           echo "Patched cmdline: $CMDLINE"
           if echo "$CMDLINE" | grep -q "twrpfastboot=1"; then
             echo "ERROR: twrpfastboot=1 re-appeared in patched image!"

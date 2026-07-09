@@ -31,6 +31,7 @@ import sys
 import re
 import shutil
 import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
@@ -264,6 +265,22 @@ def main():
     os.chdir(workdir)
     run([magiskboot, "repack", "boot.img", str(output_img)])
     print(f"\n=== Patched image written to: {output_img} ===")
+
+    # L2 fix: verify XML well-formedness post-injection (catches regex corruption)
+    print("\n[Post-check] Verifying XML well-formedness of injected files...")
+    for xml_file in ["twres/pages/advanced.xml", "twres/pages/flash_gsi.xml", "twres/ui.xml"]:
+        xml_path = extract_dir / xml_file
+        if not xml_path.is_file():
+            print(f"  WARNING: {xml_file} not found for validation", file=sys.stderr)
+            continue
+        try:
+            ET.parse(str(xml_path))
+            print(f"  ✓ {xml_file}: well-formed")
+        except ET.ParseError as e:
+            print(f"  ✗ {xml_file}: XML PARSE ERROR — {e}", file=sys.stderr)
+            print(f"    The regex injection may have corrupted the XML structure.", file=sys.stderr)
+            print(f"    Aborting — patched image is invalid.", file=sys.stderr)
+            sys.exit(1)
 
     # Verify output exists and has reasonable size
     if not os.path.isfile(output_img):

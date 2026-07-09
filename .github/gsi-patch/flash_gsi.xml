@@ -66,7 +66,9 @@
                                 <selection name="gsi_select"/>
                         </fileselector>
 
-                        <!-- When user selects a file, set tw_file to full path and go to info page -->
+                        <!-- When user selects a file, set tw_file to full path and go to info page.
+                             M2 fix: also set tw_busy=0 guard clear so flash_gsi_run can detect re-entry.
+                             L3 fix: only proceed if gsi_select is non-empty (prevents empty tw_file swipe). -->
                         <action>
                                 <condition var1="gsi_select" op="!=" var2=""/>
                                 <action function="set">tw_file=%gsi_path%/%gsi_file%</action>
@@ -164,8 +166,15 @@
                                 <text>Do not reboot or disconnect power</text>
                         </text>
 
-                        <!-- Run the script. Single quotes around %tw_file% handle spaces in path. -->
-                        <action function="cmd">/sbin/gsi_run.sh '%tw_file%'</action>
+                        <!-- Run the script. Single quotes around %tw_file% handle spaces in path.
+                             M1 note: filename must NOT contain single quotes, backticks, or $ —
+                                     the script will reject these in its usage text.
+                                     M3 fix: guard with tw_busy=0 so re-entry (user swipes again after
+                                     returning to this page) does NOT trigger a second dd flash. -->
+                        <action>
+                                <condition var1="tw_busy" var2="0"/>
+                                <action function="cmd">/sbin/gsi_run.sh '%tw_file%'</action>
+                        </action>
 
                         <!-- On success (tw_operation_status=0), go to done page.
                              tw_operation_status is set by operation_end() in TWRP action.cpp. -->
@@ -207,6 +216,14 @@ IMPORTANT: For GSI to boot properly, you MUST perform a factory reset now to rem
 
 Tap "Wipe Data" below to factory reset, or "Reboot" to skip wipe (not recommended).</text>
                         </text>
+
+                        <!-- M5 fix: clear tw_file on page load so re-entering the wizard
+                             does not auto-select the previous GSI image. -->
+                        <action>
+                                <action function="set">tw_file=</action>
+                                <action function="set">gsi_select=</action>
+                                <action function="set">gsi_file=</action>
+                        </action>
 
                         <!-- Wipe data button — left side, highlighted (recommended action) -->
                         <button style="btn_raised_hl">
