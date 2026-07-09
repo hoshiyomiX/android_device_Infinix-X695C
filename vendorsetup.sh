@@ -28,10 +28,10 @@ export FOX_USE_TAR_BINARY=1
 export FOX_USE_XZ_UTILS=1
 
 # Build Metadata
-export FOX_BUILD_TYPE="mt6785-common"
+export FOX_BUILD_TYPE="Unofficial"
 export FOX_VERSION="R11.1"
 export FOX_VARIANT="XOS"
-export OF_MAINTAINER="excaliburXD"
+export OF_MAINTAINER="Hoshiyomi"
 
 # AVB & Treble
 export OF_PATCH_AVB20=1

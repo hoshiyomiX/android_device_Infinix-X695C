@@ -234,7 +234,7 @@ jobs:
             **Build:** fox_${{ inputs.MANIFEST_BRANCH }}
             **Device:** ${{ inputs.DEVICE_NAME }}
             **Maintainer:** @${{ github.actor }}
-            **Status:** mt6785-common
+            **Status:** Unofficial
             **Variant:** XOS
             **Commit:** `${{ github.sha }}`
 
