@@ -30,7 +30,7 @@ export FOX_USE_XZ_UTILS=1
 # Build Metadata
 export FOX_BUILD_TYPE="Unofficial"
 export FOX_VERSION="R11.1"
-export FOX_VARIANT="XOS"
+export FOX_VARIANT="Crimson Deviant"
 export OF_MAINTAINER="Hoshiyomi"
 
 # AVB & Treble
