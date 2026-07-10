@@ -1,4 +1,4 @@
-name: OrangeFox GSI UI Patch
+name: OrangeFox Deviant Patch
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ on:
 
 jobs:
   patch:
-    name: Patch boot.img with Flash GSI wizard
+    name: Patch boot.img with deviant patches (GSI wizard + crimson theme)
     runs-on: ubuntu-latest
     if: github.event.sender.id == github.event.repository.owner.id
     env:
@@ -26,7 +26,7 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout device tree (for flash_gsi.xml + gsi_run.sh + patch script)
+      - name: Checkout device tree (for patch files + gsi_run.sh)
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -190,14 +190,15 @@ jobs:
           
           # Copy gsi_run.sh from device tree (recovery/root/sbin/) to gsi-patch/ working dir
           mkdir -p patch_files
-          cp ${{ github.workspace }}/.github/gsi-patch/flash_gsi.xml patch_files/
+          cp ${{ github.workspace }}/.github/deviant-patch/flash_gsi.xml patch_files/
+          cp ${{ github.workspace }}/.github/deviant-patch/accent.xml patch_files/
           cp ${{ github.workspace }}/recovery/root/sbin/gsi_run.sh patch_files/
           
           # Run the patch script. Pass ABSOLUTE paths for all arguments because
           # the Python script does os.chdir() internally, which would break
           # relative path resolution.
           set +e
-          python3 ${{ github.workspace }}/.github/gsi-patch/patch_orangefox_gsi.py \
+          python3 ${{ github.workspace }}/.github/deviant-patch/patch_orangefox_gsi.py \
             ${{ github.workspace }}/work/original.img \
             ${{ github.workspace }}/work/OrangeFox-GSI-${{ github.event.inputs.DEVICE_NAME }}.img \
             ${{ github.workspace }}/tools/magiskboot \

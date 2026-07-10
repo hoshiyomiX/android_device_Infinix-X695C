@@ -243,10 +243,22 @@ def main():
     # We must cd into extract_dir so the local_file paths are relative
     # and match what magiskboot expects.
     os.chdir(extract_dir)
+
+    # Copy custom accent.xml (crimson red theme) into extracted themes dir
+    accent_src = patch_files_dir / "accent.xml"
+    if accent_src.is_file():
+        themes_dir = extract_dir / "twres" / "themes"
+        themes_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy(accent_src, themes_dir / "accent.xml")
+        print(f"  Added: {themes_dir / 'accent.xml'} (crimson red override)")
+    else:
+        print(f"  NOTE: accent.xml not found in patch_files — skipping theme override")
+
     files_to_add = [
         ("twres/pages/advanced.xml", "0644"),
         ("twres/pages/flash_gsi.xml", "0644"),
         ("twres/ui.xml", "0644"),
+        ("twres/themes/accent.xml", "0644"),
         ("sbin/gsi_run.sh", "0755"),
     ]
     for dest_in_cpio, mode in files_to_add:
@@ -268,7 +280,7 @@ def main():
 
     # L2 fix: verify XML well-formedness post-injection (catches regex corruption)
     print("\n[Post-check] Verifying XML well-formedness of injected files...")
-    for xml_file in ["twres/pages/advanced.xml", "twres/pages/flash_gsi.xml", "twres/ui.xml"]:
+    for xml_file in ["twres/pages/advanced.xml", "twres/pages/flash_gsi.xml", "twres/ui.xml", "twres/themes/accent.xml"]:
         xml_path = extract_dir / xml_file
         if not xml_path.is_file():
             print(f"  WARNING: {xml_file} not found for validation", file=sys.stderr)
