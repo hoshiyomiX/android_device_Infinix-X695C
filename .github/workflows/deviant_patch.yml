@@ -11,12 +11,24 @@ on:
         description: 'Device name (matches release asset filename)'
         required: true
         default: 'Infinix-X695C'
+  # Auto-trigger after fox_common.yml build completes successfully.
+  # This creates a fully automated pipeline: push → build → patch → release.
+  # Constraints:
+  #   - workflow_run only fires if BOTH workflows are on the default branch (fox_11.1 ✓)
+  #   - workflow_run cannot pass inputs, so we use fallback defaults below
+  #   - The if: condition below filters to only run on success
+  workflow_run:
+    workflows: ["Recovery Builder - OFRP mt6785-common"]
+    types: [completed]
 
 jobs:
   patch:
     name: Patch boot.img with deviant patches (GSI wizard + crimson theme)
     runs-on: ubuntu-latest
-    if: github.event.sender.id == github.event.repository.owner.id
+    # Run if: manual trigger by owner, OR auto-triggered by workflow_run AND build succeeded
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.event.sender.id == github.event.repository.owner.id) ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     env:
       # Use the auto-provided GITHUB_TOKEN (not a custom 'RECOVERY' secret).
       # This token has contents:write permission via the permissions: block below,
@@ -78,8 +90,10 @@ jobs:
           set -e
           
           # Determine target release tag
-          if [ -n "${{ github.event.inputs.RELEASE_TAG }}" ]; then
-            TAG="${{ github.event.inputs.RELEASE_TAG }}"
+          # Handle both manual (inputs available) and auto (workflow_run, inputs empty)
+          RELEASE_TAG_INPUT='${{ github.event.inputs.RELEASE_TAG || '' }}'
+          if [ -n "$RELEASE_TAG_INPUT" ]; then
+            TAG="$RELEASE_TAG_INPUT"
           else
             # Get latest release tag (using API auth to avoid rate limit)
             TAG=$(curl -sL -H "Authorization: token $GH_TOKEN" \
@@ -126,7 +140,7 @@ jobs:
           import json
           with open('$RESPONSE_FILE') as f:
               d = json.load(f)
-          full_name = '${{ github.event.inputs.DEVICE_NAME }}'
+          full_name = '${{ github.event.inputs.DEVICE_NAME || 'Infinix-X695C' }}'
           # Extract codename: 'Infinix-X695C' -> 'X695C'
           codename = full_name.rsplit('-', 1)[-1] if '-' in full_name else full_name
           for a in d.get('assets', []):
@@ -200,7 +214,7 @@ jobs:
           set +e
           python3 ${{ github.workspace }}/.github/deviant-patch/patch_orangefox_gsi.py \
             ${{ github.workspace }}/work/original.img \
-            ${{ github.workspace }}/work/OrangeFox-GSI-${{ github.event.inputs.DEVICE_NAME }}.img \
+            ${{ github.workspace }}/work/OrangeFox-GSI-${{ github.event.inputs.DEVICE_NAME || 'Infinix-X695C' }}.img \
             ${{ github.workspace }}/tools/magiskboot \
             ${{ github.workspace }}/work/patch_files
           RC=$?
@@ -245,7 +259,7 @@ jobs:
         run: |
           cd ${{ github.workspace }}/work
           
-          ASSET_NAME="OrangeFox-GSI-${{ github.event.inputs.DEVICE_NAME }}.img"
+          ASSET_NAME="OrangeFox-GSI-${{ github.event.inputs.DEVICE_NAME || 'Infinix-X695C' }}.img"
           
           # Check if asset already exists (from previous run) — delete if so
           EXISTING_ASSET_ID=$(curl -sL -H "Authorization: token $GH_TOKEN" \
