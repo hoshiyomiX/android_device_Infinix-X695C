@@ -15,6 +15,19 @@
 
         Button to launch this wizard is injected into advanced.xml as a listitem.
 
+        R2 enhancements (wipe data checkbox + .img filter):
+          - File selector filtered to .img extension only (native TWRP pattern:
+            <filter extn=".img" .../> from install.xml)
+          - Optional wipe data checkbox on flash_gsi_info page (default OFF).
+            Uses native TWRP 2-button checkbox pattern (checkbox_true/false
+            with condition-controlled visibility). If checked, wizard navigates
+            to TWRP native wipe page after successful flash (tw_back=done).
+          - gsi_wipe_data variable lifecycle:
+              init=0 on flash_gsi_select entry (default OFF)
+              toggle on flash_gsi_info (checkbox)
+              read on flash_gsi_run success (route to wipe or done)
+              cleared on flash_gsi_done entry (cleanup for next run)
+
         Style/variable references verified against OrangeFox theme (Toygoon mirror):
           - Styles: text_ab_title, text_ab_subtitle, text_body1, caption, btn_raised,
                     btn_raised_hl, slider_action, fileselector_b, fileselector_s
@@ -32,6 +45,12 @@
                 <page name="flash_gsi_select">
                         <template name="base_ex"/>
 
+                        <!-- R2: Initialize wipe_data to 0 (default OFF) on page entry.
+                             Resets checkbox state when user re-enters wizard. -->
+                        <action>
+                                <action function="set">gsi_wipe_data=0</action>
+                        </action>
+
                         <text style="text_ab_title">
                                 <placement x="%col1_x_indent%" y="%ab_bc_y%"/>
                                 <text>Flash GSI Image</text>
@@ -48,7 +67,7 @@
                                 <sort name="0"/>
                                 <iconsize w="%col1_x_indent%" h="90" padding="25"/>
                                 <icon folder="folder_icon_small" file="file_icon_small" />
-                                <filter folders="y" files="y" nav="y"/>
+                                <filter extn=".img" folders="y" files="y" nav="y"/>
                                 <path name="gsi_path" default="/sdcard"/>
                                 <data name="gsi_file"/>
                                 <selection name="gsi_select"/>
@@ -60,7 +79,7 @@
                                 <sort name="0"/>
                                 <iconsize w="%col1_x_indent%" h="90" padding="25"/>
                                 <icon folder="folder_icon_small" file="file_icon_small" />
-                                <filter folders="y" files="y" nav="y"/>
+                                <filter extn=".img" folders="y" files="y" nav="y"/>
                                 <path name="gsi_path" default="/sdcard"/>
                                 <data name="gsi_file"/>
                                 <selection name="gsi_select"/>
@@ -120,9 +139,30 @@
 3. Smart resize system_a to GSI+200MB (1.7-6GB)
    If super is full, shrink system_ext+product
    (vendor is never touched)
-4. Flash GSI image to system_a
-5. Prompt for factory reset (manual wipe)</text>
+4. Flash GSI image to system_a</text>
                         </text>
+
+                        <!-- R2: Optional wipe data checkbox (default OFF).
+                             Native TWRP checkbox pattern: 2 overlapping buttons,
+                             one for unchecked (checkbox_false→set 1), one for checked
+                             (checkbox_true→set 0). Condition controls visibility.
+                             textplacement=6 = text to right of checkbox icon.
+                             Placement: row_btn2_y (above cancel button at row_btn3_y). -->
+                        <button style="checkbox">
+                                <condition var1="gsi_wipe_data" op="!=" var2="1"/>
+                                <placement x="%col1_x_caption%" y="%row_btn2_y%" textplacement="6"/>
+                                <text>Wipe data after flash (factory reset)</text>
+                                <image resource="checkbox_false"/>
+                                <action function="set">gsi_wipe_data=1</action>
+                        </button>
+
+                        <button style="checkbox">
+                                <condition var1="gsi_wipe_data" var2="1"/>
+                                <placement x="%col1_x_caption%" y="%row_btn2_y%" textplacement="6"/>
+                                <text>Wipe data after flash (factory reset)</text>
+                                <image resource="checkbox_true"/>
+                                <action function="set">gsi_wipe_data=0</action>
+                        </button>
 
                         <!-- Swipe to confirm and proceed. Use slider_action style (real OrangeFox). -->
                         <slider style="slider_action">
@@ -176,11 +216,22 @@
                                 <action function="cmd">/sbin/gsi_run.sh '%tw_file%'</action>
                         </action>
 
-                        <!-- On success (tw_operation_status=0), go to done page.
-                             tw_operation_status is set by operation_end() in TWRP action.cpp. -->
+                        <!-- On success (tw_operation_status=0), route based on gsi_wipe_data.
+                             R2: if user checked wipe_data, go to TWRP native wipe page
+                             (tw_back=flash_gsi_done so user returns to done page after wipe).
+                             If unchecked, go straight to done page. -->
                         <action>
                                 <condition var1="tw_operation_state" var2="1"/>
                                 <condition var1="tw_operation_status" var2="0"/>
+                                <condition var1="gsi_wipe_data" var2="1"/>
+                                <action function="set">tw_back=flash_gsi_done</action>
+                                <action function="page">wipe</action>
+                        </action>
+
+                        <action>
+                                <condition var1="tw_operation_state" var2="1"/>
+                                <condition var1="tw_operation_status" var2="0"/>
+                                <condition var1="gsi_wipe_data" op="!=" var2="1"/>
                                 <action function="page">flash_gsi_done</action>
                         </action>
 
@@ -212,17 +263,22 @@
                                 <placement x="%col1_x_caption%" y="%row2_2a_y%"/>
                                 <text>GSI image has been flashed to system_a successfully.
 
-IMPORTANT: For GSI to boot properly, you MUST perform a factory reset now to remove vendor remnants that conflict with the new GSI.
+If you did not enable "Wipe data after flash" earlier, it is
+recommended to wipe now to remove vendor remnants that conflict
+with the new GSI.
 
-Tap "Wipe Data" below to factory reset, or "Reboot" to skip wipe (not recommended).</text>
+Tap "Wipe Data" below for factory reset, or "Reboot System"
+to boot into the new GSI.</text>
                         </text>
 
                         <!-- M5 fix: clear tw_file on page load so re-entering the wizard
-                             does not auto-select the previous GSI image. -->
+                             does not auto-select the previous GSI image.
+                             R2: also clear gsi_wipe_data so checkbox resets for next run. -->
                         <action>
                                 <action function="set">tw_file=</action>
                                 <action function="set">gsi_select=</action>
                                 <action function="set">gsi_file=</action>
+                                <action function="set">gsi_wipe_data=0</action>
                         </action>
 
                         <!-- Wipe data button — left side, highlighted (recommended action) -->
