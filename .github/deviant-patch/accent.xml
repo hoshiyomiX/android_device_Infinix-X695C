@@ -1,67 +1,86 @@
 <?xml version="1.0"?>
 <!--
-	Custom accent.xml for Infinix X695C — Crimson Red theme override
+        Custom accent.xml for Infinix X695C — Crimson Red theme override
 
-	Injected post-build via deviant_patch.yml workflow.
-	Overrides the default OrangeFox orange (#ed6f02) with Crimson Red (#DC143C).
+        Injected post-build via deviant_patch.yml workflow.
+        Overrides the default OrangeFox orange (#ed6f02) with Crimson Red (#DC143C).
 
-	Original: accent=#ed6f02 (OrangeFox orange)
-	Custom:   accent=#DC143C (Crimson — vivid blood red)
+        FIX (R3): Previous version used DFox/ image paths — DFox is "Dark Fox"
+        (dark background variant of Fox theme) and its images are NOT red-tinted.
+        This caused slider, handle, buttons, nav icons, FAB, and keyboard enter
+        key to render with default Fox orange images instead of crimson red.
 
-	All image resources preserved from original DFox accent theme.
-	Only the <variables> section is modified.
+        Solution: OrangeFox ships a built-in Red/ theme folder with ALL UI
+        images pre-tinted red (slider_used.png, handle.png, btn_raised_hl.png,
+        nav icons, FAB, keyboard, etc.). Switching all image paths from DFox/
+        to Red/ ensures every image-based UI element is crimson red.
 
-	User can still override at runtime via Settings → Customization → Accent.
+        Variable overrides (4 variables, unchanged from R1):
+          - accent              = #DC143C  (Crimson — main accent, used by styles for text/borders)
+          - theme_accent_light  = #DC143C  (light variant for settings UI)
+          - theme_accent_dark   = #B0122F  (dark variant for settings UI)
+          - theme_accent        = Red      (theme selector name — was "Fox", now "Red")
+
+        OrangeFox style system (verified from vars.xml + styles.xml):
+          - %accent% drives: font colors, fastscroll rect, slider line, pattern dots
+          - %highlight% = %accent% (defined in vars.xml, auto-propagated)
+          - Image resources (slider_used, handle, btn_raised_hl, nav_*, fab, etc.)
+            are PNG files loaded from the folder specified in <image filename="...">
+            — these are NOT tinted at runtime, so the folder must contain
+            red-tinted PNGs. The Red/ folder provides exactly this.
+
+        User can still override at runtime via Settings → Customization → Accent.
 -->
 <recovery>
-	<resources>
-		<!-- Controls -->
-		<image name="radio_true" filename="DFox/Controls/radio_true_d" retainaspect="1"/>
-		<image name="checkbox_true" filename="DFox/Controls/checkbox_true_d" retainaspect="1"/>
-		<image name="slider_used" filename="DFox/Controls/slider_used"/>
-		<image name="handle" filename="DFox/Controls/handle" retainaspect="1"/>
-		<image name="handle_h" filename="DFox/Controls/handle_h" retainaspect="1"/>
-		<image name="handle_h_classic" filename="DFox/Controls/handle_h_classic" retainaspect="1"/>
-		<image name="btn_raised_hl" filename="DFox/Controls/btn_raised_hl"/>
-		<image name="tab_hl" filename="DFox/Controls/tab"/>
+        <resources>
+                <!-- Controls — red-tinted images from OrangeFox Red/ theme folder -->
+                <image name="radio_true" filename="Red/Controls/radio_true_d" retainaspect="1"/>
+                <image name="checkbox_true" filename="Red/Controls/checkbox_true_d" retainaspect="1"/>
+                <image name="slider_used" filename="Red/Controls/slider_used"/>
+                <image name="handle" filename="Red/Controls/handle" retainaspect="1"/>
+                <image name="handle_h" filename="Red/Controls/handle_h" retainaspect="1"/>
+                <image name="handle_h_classic" filename="Red/Controls/handle_h_classic" retainaspect="1"/>
+                <image name="btn_raised_hl" filename="Red/Controls/btn_raised_hl"/>
+                <image name="tab_hl" filename="Red/Controls/tab"/>
 
-		<!-- Nav panel -->
-		<image name="nav_menu" filename="DFox/NavPanel/menu" retainaspect="1"/>
-		<image name="nav_wipe" filename="DFox/NavPanel/wipe" retainaspect="1"/>
-		<image name="nav_files" filename="DFox/NavPanel/files" retainaspect="1"/>
-		<image name="nav_backup" filename="DFox/NavPanel/backup" retainaspect="1"/>
+                <!-- Nav panel — red-tinted icons -->
+                <image name="nav_menu" filename="Red/NavPanel/menu" retainaspect="1"/>
+                <image name="nav_wipe" filename="Red/NavPanel/wipe" retainaspect="1"/>
+                <image name="nav_files" filename="Red/NavPanel/files" retainaspect="1"/>
+                <image name="nav_backup" filename="Red/NavPanel/backup" retainaspect="1"/>
 
-		<!-- FAB -->
-		<image name="fab" filename="DFox/FAB/fab" retainaspect="1"/>
-		<image name="fab_hl" filename="DFox/FAB/fab_hl" retainaspect="1"/>
+                <!-- FAB — red-tinted floating action button -->
+                <image name="fab" filename="Red/FAB/fab" retainaspect="1"/>
+                <image name="fab_hl" filename="Red/FAB/fab_hl" retainaspect="1"/>
 
-		<!-- Info -->
-		<image name="icon_info" filename="DFox/Info/icon_info" retainaspect="1"/>
+                <!-- Info — red-tinted info icon -->
+                <image name="icon_info" filename="Red/Info/icon_info" retainaspect="1"/>
 
-		<!-- Keyboard -->
-		<image name="enter" filename="DFox/Keyboard/enter" retainaspect="1"/>
-		<image name="enter_new" filename="DFox/Keyboard/enter_new" retainaspect="1"/>
-		<image name="enter_num_new" filename="DFox/Keyboard/enter_num_new" retainaspect="1"/>
+                <!-- Keyboard — red-tinted enter keys -->
+                <image name="enter" filename="Red/Keyboard/enter" retainaspect="1"/>
+                <image name="enter_new" filename="Red/Keyboard/enter_new" retainaspect="1"/>
+                <image name="enter_num_new" filename="Red/Keyboard/enter_num_new" retainaspect="1"/>
 
-		<!-- Nav Bar -->
-		<image name="home" filename="DFox/NavBar/home" retainaspect="1"/>
-		<image name="back" filename="DFox/NavBar/back" retainaspect="1"/>
-		<image name="slideout" filename="DFox/NavBar/slideout" retainaspect="1"/>
-		<image name="keyboard_hide" filename="DFox/NavBar/keyboard_hide" retainaspect="1"/>
-		<image name="home_ng" filename="DFox/NavBar/home_ng" retainaspect="1"/>
-		<image name="back_ng" filename="DFox/NavBar/back_ng" retainaspect="1"/>
-		<image name="slideout_ng" filename="DFox/NavBar/slideout_ng" retainaspect="1"/>
-		<image name="keyboard_hide_ng" filename="DFox/NavBar/keyboard_hide_ng" retainaspect="1"/>
-		<image name="back_pie" filename="DFox/NavBar/back_pie" retainaspect="1"/>
-		<image name="back_key_pie" filename="DFox/NavBar/back_key_pie" retainaspect="1"/>
-		<image name="home_pie" filename="DFox/NavBar/home_pie" retainaspect="1"/>
-		<image name="slideout_key_pie" filename="DFox/NavBar/slideout_key_pie" retainaspect="1"/>
-	</resources>
-	<variables>
-		<!-- Crimson Red accent (#DC143C) — replaces default OrangeFox orange (#ed6f02) -->
-		<variable name="accent" value="#DC143C"/>
-		<variable name="theme_accent_light" value="#DC143C"/>
-		<variable name="theme_accent_dark" value="#B0122F"/>
-		<variable name="theme_accent" value="Fox"/>
-	</variables>
+                <!-- Nav Bar — red-tinted navigation buttons -->
+                <image name="home" filename="Red/NavBar/home" retainaspect="1"/>
+                <image name="back" filename="Red/NavBar/back" retainaspect="1"/>
+                <image name="slideout" filename="Red/NavBar/slideout" retainaspect="1"/>
+                <image name="keyboard_hide" filename="Red/NavBar/keyboard_hide" retainaspect="1"/>
+                <image name="home_ng" filename="Red/NavBar/home_ng" retainaspect="1"/>
+                <image name="back_ng" filename="Red/NavBar/back_ng" retainaspect="1"/>
+                <image name="slideout_ng" filename="Red/NavBar/slideout_ng" retainaspect="1"/>
+                <image name="keyboard_hide_ng" filename="Red/NavBar/keyboard_hide_ng" retainaspect="1"/>
+                <image name="back_pie" filename="Red/NavBar/back_pie" retainaspect="1"/>
+                <image name="back_key_pie" filename="Red/NavBar/back_key_pie" retainaspect="1"/>
+                <image name="home_pie" filename="Red/NavBar/home_pie" retainaspect="1"/>
+                <image name="slideout_key_pie" filename="Red/NavBar/slideout_key_pie" retainaspect="1"/>
+        </resources>
+        <variables>
+                <!-- Crimson Red accent (#DC143C) — replaces default OrangeFox orange (#ed6f02) -->
+                <variable name="accent" value="#DC143C"/>
+                <variable name="theme_accent_light" value="#DC143C"/>
+                <variable name="theme_accent_dark" value="#B0122F"/>
+                <!-- R3 fix: theme_accent = Red (was "Fox") — matches the Red/ image folder above -->
+                <variable name="theme_accent" value="Red"/>
+        </variables>
 </recovery>
