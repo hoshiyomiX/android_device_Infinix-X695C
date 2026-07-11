@@ -235,7 +235,7 @@ jobs:
             **Device:** ${{ inputs.DEVICE_NAME }}
             **Maintainer:** @${{ github.actor }}
             **Status:** Unofficial
-            **Variant:** Crimson Deviant
+            **Variant:** Crimson-Deviant
             **Commit:** `${{ github.sha }}`
 
     - name: Cleanup after build
