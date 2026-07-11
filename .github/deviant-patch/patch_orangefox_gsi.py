@@ -153,11 +153,15 @@ def main():
 
     flash_gsi_xml = patch_files_dir / "flash_gsi.xml"
     gsi_run_sh = patch_files_dir / "gsi_run.sh"
+    splash_xml = patch_files_dir / "splash.xml"
     if not flash_gsi_xml.is_file():
         print(f"ERROR: flash_gsi.xml not found in {patch_files_dir}", file=sys.stderr)
         sys.exit(1)
     if not gsi_run_sh.is_file():
         print(f"ERROR: gsi_run.sh not found in {patch_files_dir}", file=sys.stderr)
+        sys.exit(1)
+    if not splash_xml.is_file():
+        print(f"ERROR: splash.xml not found in {patch_files_dir}", file=sys.stderr)
         sys.exit(1)
 
     # Setup work dir
@@ -254,11 +258,23 @@ def main():
     else:
         print(f"  NOTE: accent.xml not found in patch_files — skipping theme override")
 
+    # R4: Copy custom splash.xml (crimson red splash) into extracted twres dir.
+    # This OVERRIDES the default OrangeFox orange splash with crimson red.
+    # Placed at /twres/splash.xml — same path as OrangeFox default splash.
+    if splash_xml.is_file():
+        twres_dir = extract_dir / "twres"
+        twres_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy(splash_xml, twres_dir / "splash.xml")
+        print(f"  Added: {twres_dir / 'splash.xml'} (crimson red splash override)")
+    else:
+        print(f"  NOTE: splash.xml not found in patch_files — skipping splash override")
+
     files_to_add = [
         ("twres/pages/advanced.xml", "0644"),
         ("twres/pages/flash_gsi.xml", "0644"),
         ("twres/ui.xml", "0644"),
         ("twres/themes/accent.xml", "0644"),
+        ("twres/splash.xml", "0644"),
         ("sbin/gsi_run.sh", "0755"),
     ]
     for dest_in_cpio, mode in files_to_add:
@@ -280,7 +296,7 @@ def main():
 
     # L2 fix: verify XML well-formedness post-injection (catches regex corruption)
     print("\n[Post-check] Verifying XML well-formedness of injected files...")
-    for xml_file in ["twres/pages/advanced.xml", "twres/pages/flash_gsi.xml", "twres/ui.xml", "twres/themes/accent.xml"]:
+    for xml_file in ["twres/pages/advanced.xml", "twres/pages/flash_gsi.xml", "twres/ui.xml", "twres/themes/accent.xml", "twres/splash.xml"]:
         xml_path = extract_dir / xml_file
         if not xml_path.is_file():
             print(f"  WARNING: {xml_file} not found for validation", file=sys.stderr)

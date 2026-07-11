@@ -1,0 +1,104 @@
+<?xml version="1.0"?>
+<!--
+        Custom splash.xml for Infinix X695C — Crimson Red splash override
+
+        Injected post-build via deviant_patch.yml workflow.
+        Replaces the default OrangeFox orange splash (#FF8038 / #D34E38) with
+        Crimson Red (#DC143C / #B0122F) to match the Crimson-Deviant accent theme.
+
+        Original (OrangeFox default splash.xml):
+          - header_color     = #FF8038  (bright orange — top half fill)
+          - background_color = #D34E38  (reddish-orange — bottom half)
+          - logo             = Splash/logo_w  (white OrangeFox fox logo)
+          - background image = Splash/original (orange-to-red gradient fox silhouette)
+          - text             = "OrangeFox" / "Recovery" (white, EuclidFlex font)
+
+        Custom (this file):
+          - header_color     = #DC143C  (Crimson — vivid blood red, matches accent.xml)
+          - background_color = #B0122F  (Dark Crimson — matches theme_accent_dark)
+          - logo             = Splash/logo_w  (unchanged — white logo looks great on red)
+          - background image = Splash/original (unchanged — abstract silhouette works on any color)
+          - text             = "OrangeFox" / "Recovery" (unchanged — white on red is high-contrast)
+
+        Why not change the logo image?
+          The default Splash/logo_w.png is a white fox silhouette — it renders cleanly
+          on any saturated background color (red, orange, blue, etc.). OrangeFox does
+          NOT ship a red-tinted splash logo (only logo_o=orange, logo_w=white,
+          logo_d=dark). White-on-red is the standard high-contrast pairing, so we
+          keep logo_w.
+
+        Why not change the background image?
+          Splash/original.png is an abstract orange-to-red gradient silhouette of the
+          fox logo. On a crimson background, it blends subtly without clashing.
+          Changing it would require shipping a new PNG (out of scope for "replace
+          with non-default splash"). The fill color is the dominant visual element.
+
+        How this gets applied:
+          patch_orangefox_gsi.py injects this file to /twres/splash.xml in the
+          ramdisk.cpio, OVERRIDING the OrangeFox default splash.xml. The OrangeFox
+          customization system (ext_custom_splash page) still works at runtime —
+          if user picks a different splash via Settings → Customization → Splash,
+          it regenerates /twres/splash.xml from sed/splash.xml template, replacing
+          this file. That's expected behavior.
+
+        Resolution: 1080x2460 (matches OF_SCREEN_H=2460 in vendorsetup.sh).
+        Note: splash.xml uses width=1080 + h=1920 (OrangeFox default — the renderer
+        scales to actual screen height). Verified from OrangeFox source:
+        gui/theme/portrait_hdpi/splash.xml uses same 1080x1920 dims regardless
+        of device screen height.
+-->
+<recovery>
+	<details>
+		<resolution width="1080" h="1920"/>
+		<themeversion>3</themeversion>
+	</details>
+
+	<resources>
+		<image name="splash_logo_w" filename="Splash/logo_w" retainaspect="1"/>
+		<image name="splash_bg" filename="Splash/original" retainaspect="1"/>
+		<font name="of" filename="EuclidFlex-Medium.ttf" size="64"/>
+		<font name="recovery" filename="EuclidFlex-Regular.ttf" size="52"/>
+	</resources>
+
+	<variables>
+		<variable name="of" value="%screen_h%-400"/>
+		<variable name="rec" value="%screen_h%-320"/>
+		<variable name="screen_width" value="1080"/>
+		<variable name="screen_height" value="1920"/>
+		<!-- R4: Crimson Red splash colors (replaces default OrangeFox orange) -->
+		<variable name="header_color" value="#DC143C"/>
+		<variable name="background_color" value="#B0122F"/>
+	</variables>
+
+	<pages>
+		<page name="splash">
+			<background color="%background_color%"/>
+
+			<fill color="%header_color%">
+				<placement x="0" y="0" w="%screen_width%" h="%screen_height%"/>
+			</fill>
+
+			<image>
+				<image resource="splash_bg"/>
+				<placement x="540" y="%center_y%" placement="4"/>
+			</image>
+
+			<image>
+				<image resource="splash_logo_w"/>
+				<placement x="540" y="%center_y%" placement="4"/>
+			</image>
+
+			<text style="menu_text">
+				<placement x="540" y="%of%" placement="4"/>
+				<font resource="of" color="#ffffff"/>
+				<text>OrangeFox</text>
+			</text>
+
+			<text style="menu_text">
+				<placement x="540" y="%rec%" placement="4"/>
+				<font resource="recovery" color="#ffffff"/>
+				<text>Recovery</text>
+			</text>
+		</page>
+	</pages>
+</recovery>
