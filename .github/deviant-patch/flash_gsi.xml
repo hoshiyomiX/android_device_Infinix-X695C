@@ -85,11 +85,22 @@
                                 <selection name="gsi_select"/>
                         </fileselector>
 
-                        <!-- When user selects a file, set tw_file to full path and go to info page.
-                             M2 fix: also set tw_busy=0 guard clear so flash_gsi_run can detect re-entry.
-                             L3 fix: only proceed if gsi_select is non-empty (prevents empty tw_file swipe). -->
+                        <!-- R5 fix: Use op="modified" instead of op="!=" var2="".
+                             Previous condition (gsi_select != "") fired on EVERY page render
+                             as long as gsi_select was non-empty — including when gsi_select
+                             was set from a previous wizard run OR auto-populated by TWRP.
+                             This caused the file picker to auto-skip to flash_gsi_info
+                             immediately, never letting the user actually pick a file.
+
+                             OrangeFox native pattern (from install.xml add_zip page):
+                               <condition var1="tw_filename_tmp" op="modified"/>
+                             The op="modified" operator fires ONLY when the variable actually
+                             changes value (i.e. user taps a file in the fileselector).
+                             This is the correct pattern for "navigate forward after selection".
+
+                             Reference: gui/theme/portrait_hdpi/pages/install.xml line 608. -->
                         <action>
-                                <condition var1="gsi_select" op="!=" var2=""/>
+                                <condition var1="gsi_select" op="modified"/>
                                 <action function="set">tw_file=%gsi_path%/%gsi_file%</action>
                                 <action function="page">flash_gsi_info</action>
                         </action>
