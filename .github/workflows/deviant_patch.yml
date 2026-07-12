@@ -202,10 +202,14 @@ jobs:
         run: |
           cd ${{ github.workspace }}/work
           
-          # Copy gsi_run.sh from device tree (recovery/root/sbin/) to gsi-patch/ working dir
+          # Copy patch files from device tree to working dir
+          # R5 fix: add splash.xml (was missing — caused patch script to fail
+          # with "ERROR: splash.xml not found in patch_files" because
+          # patch_orangefox_gsi.py validates splash.xml exists at start)
           mkdir -p patch_files
           cp ${{ github.workspace }}/.github/deviant-patch/flash_gsi.xml patch_files/
           cp ${{ github.workspace }}/.github/deviant-patch/accent.xml patch_files/
+          cp ${{ github.workspace }}/.github/deviant-patch/splash.xml patch_files/
           cp ${{ github.workspace }}/recovery/root/sbin/gsi_run.sh patch_files/
           
           # Run the patch script. Pass ABSOLUTE paths for all arguments because
