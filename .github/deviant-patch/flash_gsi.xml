@@ -41,8 +41,45 @@
 <recovery>
         <pages>
 
-                <!-- Step 1: File picker — user selects gsi.img -->
+                <!-- Step 1: File picker — user selects gsi.img.
+                     R6 fix: Rewrote using OrangeFox native add_zip page template
+                     (from install.xml line 566). Previous version used custom
+                     <iconsize>, hardcoded <sort name="0"/>, small icons, and
+                     non-standard placement vars — caused file picker to render
+                     blank. Native template uses standard vars + no iconsize +
+                     user-driven sort + full-size icons.
+
+                     Pattern copied from:
+                       gui/theme/portrait_hdpi/pages/install.xml page "add_zip"
+                     Changes for GSI:
+                       - filter extn=".img" (was ".zip;.ozip")
+                       - selection/data/path names: tw_gsi_* (was tw_zip_*/tw_filename_*)
+                       - navigate to flash_gsi_info (was flash_confirm)
+                       - back → advanced (was flash_confirm)
+                       - init gsi_wipe_data=0 on entry (R2 wipe checkbox reset) -->
                 <page name="flash_gsi_select">
+                        <fileselector style="fileselector_b">
+                                <condition var1="list_font" var2="1"/>
+                                <placement x="0" y="%row_ab_ex_y%" w="%fileselector_width%" h="%fileselector_terminal_height%"/>
+                                <sort name="tw_gui_sort_order"/>
+                                <icon folder="folder_icon" file="file_icon"/>
+                                <filter extn=".img" folders="1" files="1"/>
+                                <path name="tw_gsi_location" default="/sdcard"/>
+                                <data name="tw_gsi_filename"/>
+                                <selection name="tw_gsi_file"/>
+                        </fileselector>
+
+                        <fileselector style="fileselector_s">
+                                <condition var1="list_font" op="!=" var2="1"/>
+                                <placement x="0" y="%row_ab_ex_y%" w="%fileselector_width%" h="%fileselector_terminal_height%"/>
+                                <sort name="tw_gui_sort_order"/>
+                                <icon folder="folder_icon_small" file="file_icon_small"/>
+                                <filter extn=".img" folders="1" files="1"/>
+                                <path name="tw_gsi_location" default="/sdcard"/>
+                                <data name="tw_gsi_filename"/>
+                                <selection name="tw_gsi_file"/>
+                        </fileselector>
+
                         <template name="base_ex"/>
 
                         <!-- R2: Initialize wipe_data to 0 (default OFF) on page entry.
@@ -56,59 +93,38 @@
                                 <text>Flash GSI Image</text>
                         </text>
 
-                        <text style="text_ab_subtitle">
-                                <placement x="%col1_x_indent%" y="%row1_2_y%"/>
-                                <text>Select a GSI image (.img) to flash to system_a</text>
+                        <template name="actionbar_sort"/>
+                        <template name="actionbar_storage"/>
+
+                        <text style="text_ab_title">
+                                <placement x="%col1_x_indent%" y="%row1_2_y%" placement="2"/>
+                                <text>Select GSI Image</text>
                         </text>
 
-                        <fileselector style="fileselector_b">
-                                <condition var1="list_font" var2="1"/>
-                                <placement x="0" y="%ab_h%" w="%screen_w%" h="%bl_fullscreen_h%"/>
-                                <sort name="0"/>
-                                <iconsize w="%col1_x_indent%" h="90" padding="25"/>
-                                <icon folder="folder_icon_small" file="file_icon_small" />
-                                <filter extn=".img" folders="y" files="y" nav="y"/>
-                                <path name="gsi_path" default="/sdcard"/>
-                                <data name="gsi_file"/>
-                                <selection name="gsi_select"/>
-                        </fileselector>
+                        <text style="text_ab_subtitle_lim">
+                                <placement x="%col1_x_indent%" y="%row1_2_y%"/>
+                                <text>%tw_gsi_location%</text>
+                        </text>
 
-                        <fileselector style="fileselector_s">
-                                <condition var1="list_font" op="!=" var2="1"/>
-                                <placement x="0" y="%ab_h%" w="%screen_w%" h="%bl_fullscreen_h%"/>
-                                <sort name="0"/>
-                                <iconsize w="%col1_x_indent%" h="90" padding="25"/>
-                                <icon folder="folder_icon_small" file="file_icon_small" />
-                                <filter extn=".img" folders="y" files="y" nav="y"/>
-                                <path name="gsi_path" default="/sdcard"/>
-                                <data name="gsi_file"/>
-                                <selection name="gsi_select"/>
-                        </fileselector>
-
-                        <!-- R5 fix: Use op="modified" instead of op="!=" var2="".
-                             Previous condition (gsi_select != "") fired on EVERY page render
-                             as long as gsi_select was non-empty — including when gsi_select
-                             was set from a previous wizard run OR auto-populated by TWRP.
-                             This caused the file picker to auto-skip to flash_gsi_info
-                             immediately, never letting the user actually pick a file.
-
-                             OrangeFox native pattern (from install.xml add_zip page):
-                               <condition var1="tw_filename_tmp" op="modified"/>
-                             The op="modified" operator fires ONLY when the variable actually
-                             changes value (i.e. user taps a file in the fileselector).
-                             This is the correct pattern for "navigate forward after selection".
-
-                             Reference: gui/theme/portrait_hdpi/pages/install.xml line 608. -->
+                        <!-- R5 fix: op="modified" — fires ONLY when user taps a file
+                             (not on every page render). Matches OrangeFox native
+                             add_zip pattern (install.xml line 608). -->
                         <action>
-                                <condition var1="gsi_select" op="modified"/>
-                                <action function="set">tw_file=%gsi_path%/%gsi_file%</action>
+                                <condition var1="tw_gsi_filename" op="modified"/>
+                                <action function="set">tw_file=%tw_gsi_file%</action>
                                 <action function="page">flash_gsi_info</action>
                         </action>
 
-                        <!-- Back key returns to advanced -->
+                        <template name="gestures"/>
+
                         <action>
                                 <touch key="back"/>
                                 <action function="page">advanced</action>
+                        </action>
+
+                        <action>
+                                <touch key="home"/>
+                                <action function="page">main</action>
                         </action>
                 </page>
 
