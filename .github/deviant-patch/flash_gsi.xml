@@ -128,7 +128,10 @@
                         </action>
                 </page>
 
-                <!-- Step 2: Show file info + what will happen -->
+                <!-- Step 2: Show file info + what will happen.
+                     R7 fix: aligned with native OrangeFox flash_confirm page pattern
+                     (from install.xml). Added gestures template for swipe gesture support.
+                     Native uses text_ab_subtitle_lim for path display. -->
                 <page name="flash_gsi_info">
                         <template name="base_ex"/>
 
@@ -137,30 +140,31 @@
                                 <text>GSI Image Info</text>
                         </text>
 
-                        <text style="caption">
-                                <placement x="%col1_x_caption%" y="%row2_1a_y%"/>
-                                <text>File</text>
+                        <text style="text_ab_title">
+                                <placement x="%col1_x_indent%" y="%row1_2_y%" placement="2"/>
+                                <text>Confirm Flash</text>
                         </text>
-                        <text style="text_body1">
-                                <placement x="%col1_x_caption%" y="%row2_2a_y%"/>
+
+                        <text style="text_ab_subtitle">
+                                <placement x="%col1_x_indent%" y="%row1_2_y%"/>
                                 <text>%tw_file%</text>
                         </text>
 
                         <text style="caption">
-                                <placement x="%col1_x_caption%" y="%row3_1a_y%"/>
+                                <placement x="%col1_x_caption%" y="%row2_1a_y%"/>
                                 <text>Target partition</text>
                         </text>
                         <text style="text_body1">
-                                <placement x="%col1_x_caption%" y="%row3_2a_y%"/>
+                                <placement x="%col1_x_caption%" y="%row2_2a_y%"/>
                                 <text>/dev/block/mapper/system_a (active slot)</text>
                         </text>
 
                         <text style="caption">
-                                <placement x="%col1_x_caption%" y="%row4_1a_y%"/>
+                                <placement x="%col1_x_caption%" y="%row3_1a_y%"/>
                                 <text>Will be performed</text>
                         </text>
                         <text style="text_body1">
-                                <placement x="%col1_x_caption%" y="%row4_2a_y%"/>
+                                <placement x="%col1_x_caption%" y="%row3_2a_y%"/>
                                 <text>1. Validate ext4 magic + min size 1.5GB
 2. Verify SHA256 (if .sha256 file present)
 3. Smart resize system_a to GSI+200MB (1.7-6GB)
@@ -210,27 +214,41 @@
                                 <action function="page">advanced</action>
                         </button>
 
+                        <template name="gestures"/>
+
                         <action>
                                 <touch key="back"/>
                                 <action function="page">flash_gsi_select</action>
                         </action>
+
+                        <action>
+                                <touch key="home"/>
+                                <action function="page">main</action>
+                        </action>
                 </page>
 
                 <!-- Step 3: Execute gsi_run.sh via cmd action.
+                     R7 fix: aligned with native OrangeFox flash_zip page pattern.
+                     Uses text_ab_subtitle_lim for file path display (native style).
+                     Native uses text_ab_title with placement=2 for subtitle header.
                      CRITICAL: cmd action must be single-line and quote the path argument
-                     to handle filenames with spaces. The TWRP cmd() function passes the
-                     whole arg string to system(), so we use sh -c style with single quotes. -->
+                     to handle filenames with spaces. -->
                 <page name="flash_gsi_run">
                         <template name="base_console_cancel"/>
 
                         <text style="text_ab_title">
                                 <placement x="%col1_x_indent%" y="%ab_bc_y%"/>
-                                <text>Flashing GSI...</text>
+                                <text>Flashing GSI</text>
                         </text>
 
-                        <text style="text_ab_subtitle">
-                                <placement x="%col1_x_indent%" y="%row1_2_y%"/>
+                        <text style="text_ab_title">
+                                <placement x="%col1_x_indent%" y="%row1_2_y%" placement="2"/>
                                 <text>Do not reboot or disconnect power</text>
+                        </text>
+
+                        <text style="text_ab_subtitle_lim">
+                                <placement x="%col1_x_indent%" y="%row1_2_y%"/>
+                                <text>%tw_file%</text>
                         </text>
 
                         <!-- Run the script. Single quotes around %tw_file% handle spaces in path.
@@ -276,21 +294,27 @@
                 </page>
 
                 <!-- Step 4: Success page with wipe prompt.
-                     Uses standard OrangeFox button pattern: <text> inside <button>,
-                     btn_raised style, btn_raised_left_x / btn_raised_right_x / row_btnN_y vars. -->
+                     R7 fix: aligned with native OrangeFox flash_done page pattern.
+                     Uses base_done template (was base_ex) — native done page template
+                     that includes proper status bar + reboot handling.
+                     Uses text_ab_subtitle for status display (native style, was text_body1).
+                     Added gestures template + home key navigation (matches native flash_done). -->
                 <page name="flash_gsi_done">
-                        <template name="base_ex"/>
+                        <template name="base_done"/>
 
                         <text style="text_ab_title">
                                 <placement x="%col1_x_indent%" y="%ab_bc_y%"/>
                                 <text>GSI Flash Complete</text>
                         </text>
 
+                        <text style="text_ab_subtitle">
+                                <placement x="%col1_x_indent%" y="%row1_2_y%"/>
+                                <text>GSI image flashed to system_a successfully</text>
+                        </text>
+
                         <text style="text_body1">
                                 <placement x="%col1_x_caption%" y="%row2_2a_y%"/>
-                                <text>GSI image has been flashed to system_a successfully.
-
-If you did not enable "Wipe data after flash" earlier, it is
+                                <text>If you did not enable "Wipe data after flash" earlier, it is
 recommended to wipe now to remove vendor remnants that conflict
 with the new GSI.
 
@@ -331,9 +355,16 @@ to boot into the new GSI.</text>
                                 <action function="page">advanced</action>
                         </button>
 
+                        <template name="gestures"/>
+
                         <action>
                                 <touch key="back"/>
                                 <action function="page">advanced</action>
+                        </action>
+
+                        <action>
+                                <touch key="home"/>
+                                <action function="page">main</action>
                         </action>
                 </page>
 
